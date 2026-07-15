@@ -32,7 +32,10 @@ Render의 Python API가 Supabase PostgreSQL에 시리얼을 저장합니다. Ren
 
 최초 배포 시 Render 환경변수 `ADMIN_PASSWORD`에 10자 이상의 초기 비밀번호를 설정하세요. 관리자 API는 로그인, 등록 시리얼 조회, 비밀번호 변경, 로그아웃을 제공합니다. 변경된 비밀번호는 PBKDF2 해시로 PostgreSQL에 저장됩니다.
 
+- 관리자 화면: `https://kang0840.github.io/ML-cylinder/admin.html`
+
 - `POST /api/admin/login`
 - `GET /api/admin/serials`
 - `POST /api/admin/password`
 - `POST /api/admin/logout`
+https://ml-cylinder.onrender.com
