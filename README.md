@@ -27,3 +27,12 @@ python server.py
 ## 영구 시리얼 저장 서버
 
 Render의 Python API가 Supabase PostgreSQL에 시리얼을 저장합니다. Render 환경변수 `DATABASE_URL`에는 Supabase 대시보드의 **Session pooler** 연결 문자열을 설정합니다. 비밀번호가 포함된 연결 문자열은 GitHub에 커밋하지 마세요.
+
+## 관리자 API
+
+최초 배포 시 Render 환경변수 `ADMIN_PASSWORD`에 10자 이상의 초기 비밀번호를 설정하세요. 관리자 API는 로그인, 등록 시리얼 조회, 비밀번호 변경, 로그아웃을 제공합니다. 변경된 비밀번호는 PBKDF2 해시로 PostgreSQL에 저장됩니다.
+
+- `POST /api/admin/login`
+- `GET /api/admin/serials`
+- `POST /api/admin/password`
+- `POST /api/admin/logout`

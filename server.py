@@ -7,6 +7,11 @@ import json
 import random
 import datetime
 import re
+import hashlib
+import secrets
+import time
+import base64
+import threading
 
 try:
     import psycopg
@@ -61,6 +66,13 @@ class PostgresSerialStorage:
                     purchased_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
                 )
             """)
+            connection.execute("""
+                CREATE TABLE IF NOT EXISTS admin_settings (
+                    setting_key TEXT PRIMARY KEY,
+                    setting_value TEXT NOT NULL,
+                    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+                )
+            """)
 
     def _connect(self):
         return psycopg.connect(self.database_url, autocommit=True)
@@ -82,11 +94,73 @@ class PostgresSerialStorage:
 
     def list(self):
         with self._connect() as connection:
-            return [row[0] for row in connection.execute("SELECT serial FROM serials")]
+            rows = connection.execute(
+                "SELECT serial, purchased_at FROM serials ORDER BY purchased_at DESC"
+            ).fetchall()
+            return [{"serial": row[0], "purchasedAt": row[1].isoformat()} for row in rows]
+
+    def get_admin_hash(self):
+        with self._connect() as connection:
+            row = connection.execute(
+                "SELECT setting_value FROM admin_settings WHERE setting_key = 'password_hash'"
+            ).fetchone()
+            return row[0] if row else ""
+
+    def set_admin_hash(self, value: str):
+        with self._connect() as connection:
+            connection.execute("""
+                INSERT INTO admin_settings (setting_key, setting_value)
+                VALUES ('password_hash', %s)
+                ON CONFLICT (setting_key) DO UPDATE
+                SET setting_value = EXCLUDED.setting_value, updated_at = NOW()
+            """, (value,))
 
 
 DATABASE_URL = os.environ.get("DATABASE_URL", "").strip()
 storage = PostgresSerialStorage(DATABASE_URL) if DATABASE_URL else JsonSerialStorage(SERIAL_DB)
+
+PBKDF2_ITERATIONS = 500_000
+ADMIN_SESSIONS = {}
+SESSION_LOCK = threading.Lock()
+SESSION_SECONDS = 8 * 60 * 60
+
+def hash_password(password: str) -> str:
+    salt = secrets.token_bytes(16)
+    derived = hashlib.pbkdf2_hmac("sha256", password.encode(), salt, PBKDF2_ITERATIONS)
+    return f"{PBKDF2_ITERATIONS}${base64.b64encode(salt).decode()}${base64.b64encode(derived).decode()}"
+
+def verify_password(password: str, encoded: str) -> bool:
+    try:
+        iterations, salt_text, hash_text = encoded.split("$", 2)
+        salt = base64.b64decode(salt_text)
+        expected = base64.b64decode(hash_text)
+        actual = hashlib.pbkdf2_hmac("sha256", password.encode(), salt, int(iterations))
+        return secrets.compare_digest(actual, expected)
+    except (ValueError, TypeError):
+        return False
+
+def initialize_admin():
+    if not DATABASE_URL:
+        return
+    initial_password = os.environ.get("ADMIN_PASSWORD", "")
+    if not storage.get_admin_hash() and initial_password:
+        storage.set_admin_hash(hash_password(initial_password))
+
+def create_session() -> str:
+    token = secrets.token_urlsafe(32)
+    with SESSION_LOCK:
+        ADMIN_SESSIONS[token] = time.time() + SESSION_SECONDS
+    return token
+
+def is_valid_session(token: str) -> bool:
+    with SESSION_LOCK:
+        expires = ADMIN_SESSIONS.get(token, 0)
+        if expires <= time.time():
+            ADMIN_SESSIONS.pop(token, None)
+            return False
+        return True
+
+initialize_admin()
 
 class MetricsState:
     def __init__(self):
@@ -208,13 +282,19 @@ class StaticHandler(SimpleHTTPRequestHandler):
         parsed = urlparse(self.path)
         if parsed.path == "/api/purchase":
             return self.handle_api_purchase()
+        if parsed.path == "/api/admin/login":
+            return self.handle_admin_login()
+        if parsed.path == "/api/admin/password":
+            return self.handle_admin_password()
+        if parsed.path == "/api/admin/logout":
+            return self.handle_admin_logout()
         return super().do_POST()
 
     def do_OPTIONS(self):
         self.send_response(204)
         self.send_cors_headers()
         self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
-        self.send_header("Access-Control-Allow-Headers", "Content-Type")
+        self.send_header("Access-Control-Allow-Headers", "Content-Type, Authorization")
         self.end_headers()
 
     def send_cors_headers(self):
@@ -238,6 +318,12 @@ class StaticHandler(SimpleHTTPRequestHandler):
         query = parse_qs(parsed.query)
         serial = normalize_serial(query.get("serial", [""])[0])
 
+        if path == "/api/admin/serials":
+            if not self.require_admin():
+                return
+            self.send_json({"serials": storage.list()})
+            return
+
         if path == "/api/validate":
             self.send_json({"serial": serial, "valid": bool(serial and storage.exists(serial))})
             return
@@ -250,6 +336,56 @@ class StaticHandler(SimpleHTTPRequestHandler):
             return
 
         self.send_error(404, "Not Found")
+
+    def read_json(self):
+        try:
+            length = int(self.headers.get("Content-Length", "0"))
+            return json.loads(self.rfile.read(length).decode("utf-8")) if length else {}
+        except (ValueError, json.JSONDecodeError, UnicodeDecodeError):
+            return {}
+
+    def bearer_token(self):
+        header = self.headers.get("Authorization", "")
+        return header[7:] if header.startswith("Bearer ") else ""
+
+    def require_admin(self):
+        if is_valid_session(self.bearer_token()):
+            return True
+        self.send_json({"error": "unauthorized"}, status=401)
+        return False
+
+    def handle_admin_login(self):
+        password_hash = storage.get_admin_hash() if DATABASE_URL else ""
+        if not password_hash:
+            self.send_json({"error": "admin_not_configured"}, status=503)
+            return
+        password = str(self.read_json().get("password", ""))
+        if not verify_password(password, password_hash):
+            self.send_json({"error": "invalid_credentials"}, status=401)
+            return
+        self.send_json({"token": create_session(), "expiresIn": SESSION_SECONDS})
+
+    def handle_admin_password(self):
+        if not self.require_admin():
+            return
+        data = self.read_json()
+        current = str(data.get("currentPassword", ""))
+        new_password = str(data.get("newPassword", ""))
+        if not verify_password(current, storage.get_admin_hash()):
+            self.send_json({"error": "invalid_current_password"}, status=400)
+            return
+        if len(new_password) < 10:
+            self.send_json({"error": "weak_password", "message": "비밀번호는 10자 이상이어야 합니다."}, status=400)
+            return
+        storage.set_admin_hash(hash_password(new_password))
+        with SESSION_LOCK:
+            ADMIN_SESSIONS.clear()
+        self.send_json({"changed": True})
+
+    def handle_admin_logout(self):
+        with SESSION_LOCK:
+            ADMIN_SESSIONS.pop(self.bearer_token(), None)
+        self.send_json({"loggedOut": True})
 
     def handle_api_purchase(self):
         length = int(self.headers.get("Content-Length", "0"))
