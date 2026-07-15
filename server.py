@@ -8,12 +8,17 @@ import random
 import datetime
 import re
 
+try:
+    import psycopg
+except ImportError:
+    psycopg = None
+
 ROOT = Path(__file__).resolve().parent
 PUBLIC_DIR = ROOT / "public"
 DATA_DIR = ROOT / "data"
 SERIAL_DB = DATA_DIR / "serials.json"
 
-class SerialStorage:
+class JsonSerialStorage:
     def __init__(self, path: Path):
         self.path = path
         self.path.parent.mkdir(parents=True, exist_ok=True)
@@ -44,7 +49,44 @@ class SerialStorage:
     def list(self):
         return list(self.data.keys())
 
-storage = SerialStorage(SERIAL_DB)
+class PostgresSerialStorage:
+    def __init__(self, database_url: str):
+        if psycopg is None:
+            raise RuntimeError("DATABASE_URL이 설정되었지만 psycopg가 설치되지 않았습니다.")
+        self.database_url = database_url
+        with self._connect() as connection:
+            connection.execute("""
+                CREATE TABLE IF NOT EXISTS serials (
+                    serial TEXT PRIMARY KEY,
+                    purchased_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+                )
+            """)
+
+    def _connect(self):
+        return psycopg.connect(self.database_url, autocommit=True)
+
+    def exists(self, serial: str) -> bool:
+        with self._connect() as connection:
+            row = connection.execute(
+                "SELECT 1 FROM serials WHERE serial = %s", (serial,)
+            ).fetchone()
+            return row is not None
+
+    def add(self, serial: str) -> dict:
+        with self._connect() as connection:
+            row = connection.execute(
+                "INSERT INTO serials (serial) VALUES (%s) RETURNING purchased_at",
+                (serial,),
+            ).fetchone()
+        return {"serial": serial, "purchasedAt": row[0].isoformat()}
+
+    def list(self):
+        with self._connect() as connection:
+            return [row[0] for row in connection.execute("SELECT serial FROM serials")]
+
+
+DATABASE_URL = os.environ.get("DATABASE_URL", "").strip()
+storage = PostgresSerialStorage(DATABASE_URL) if DATABASE_URL else JsonSerialStorage(SERIAL_DB)
 
 class MetricsState:
     def __init__(self):
@@ -155,6 +197,9 @@ class StaticHandler(SimpleHTTPRequestHandler):
 
     def do_GET(self):
         parsed = urlparse(self.path)
+        if parsed.path == "/health":
+            self.send_json({"status": "ok", "database": "postgres" if DATABASE_URL else "json"})
+            return
         if parsed.path.startswith("/api/"):
             return self.handle_api_get(parsed)
         return super().do_GET()
@@ -165,10 +210,25 @@ class StaticHandler(SimpleHTTPRequestHandler):
             return self.handle_api_purchase()
         return super().do_POST()
 
+    def do_OPTIONS(self):
+        self.send_response(204)
+        self.send_cors_headers()
+        self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+        self.send_header("Access-Control-Allow-Headers", "Content-Type")
+        self.end_headers()
+
+    def send_cors_headers(self):
+        allowed = os.environ.get("ALLOWED_ORIGIN", "https://kang0840.github.io")
+        origin = self.headers.get("Origin", "")
+        if origin == allowed or (not DATABASE_URL and origin.startswith("http://localhost")):
+            self.send_header("Access-Control-Allow-Origin", origin)
+            self.send_header("Vary", "Origin")
+
     def send_json(self, payload: dict, status: int = 200):
         body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
         self.send_response(status)
         self.send_header("Content-Type", "application/json; charset=utf-8")
+        self.send_cors_headers()
         self.send_header("Content-Length", str(len(body)))
         self.end_headers()
         self.wfile.write(body)
@@ -213,7 +273,7 @@ class StaticHandler(SimpleHTTPRequestHandler):
 def main():
     parser = argparse.ArgumentParser(description="Smart Cylinder API + static server")
     parser.add_argument("--host", default="127.0.0.1")
-    parser.add_argument("--port", type=int, default=8000)
+    parser.add_argument("--port", type=int, default=int(os.environ.get("PORT", "8000")))
     args = parser.parse_args()
 
     os.chdir(PUBLIC_DIR)

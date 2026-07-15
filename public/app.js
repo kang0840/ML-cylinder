@@ -1,5 +1,5 @@
 const SERIAL_KEY = 'smart-cylinder-serials';
-const isStaticHosting = () => location.hostname.endsWith('github.io') || location.protocol === 'file:';
+const API_ROOT = location.hostname.endsWith('github.io') ? 'https://ml-cylinder-api-kang0840.onrender.com/' : '';
 
 function formatSerial(value) {
   const cleaned = (value || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
@@ -26,12 +26,7 @@ function demoPurchase() {
 }
 
 async function request(path, options = {}) {
-  if (isStaticHosting()) {
-    if (path.includes('/purchase')) return demoPurchase();
-    const serial = new URL(path, location.href).searchParams.get('serial') || '';
-    return { serial, valid: getSerials().includes(serial) };
-  }
-  const response = await fetch(path, { ...options, credentials: 'same-origin' });
+  const response = await fetch(new URL(path, API_ROOT || location.href), options);
   if (!response.ok) throw new Error(await response.text());
   return response.json();
 }

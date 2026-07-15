@@ -40,9 +40,9 @@ function demoMetrics(serial) {
 }
 
 async function getMetrics(serial) {
-  if (location.hostname.endsWith('github.io') || location.protocol === 'file:') return demoMetrics(serial);
+  const apiRoot = location.hostname.endsWith('github.io') ? 'https://ml-cylinder-api-kang0840.onrender.com/' : location.href;
   try {
-    const response = await fetch(`api/metrics?serial=${encodeURIComponent(serial)}`);
+    const response = await fetch(new URL(`api/metrics?serial=${encodeURIComponent(serial)}`, apiRoot));
     if (!response.ok) throw new Error('데이터를 불러오지 못했습니다.');
     return response.json();
   } catch { return demoMetrics(serial); }
