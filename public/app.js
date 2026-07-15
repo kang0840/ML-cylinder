@@ -1,5 +1,5 @@
 const SERIAL_KEY = 'smart-cylinder-serials';
-const API_ROOT = location.hostname.endsWith('github.io') ? 'https://ml-cylinder-api-kang0840.onrender.com/' : '';
+const API_ROOT = location.hostname.endsWith('github.io') ? 'https://ml-cylinder.onrender.com/' : '';
 
 function formatSerial(value) {
   const cleaned = (value || '').toUpperCase().replace(/[^A-Z0-9]/g, '');

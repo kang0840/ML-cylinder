@@ -40,7 +40,7 @@ function demoMetrics(serial) {
 }
 
 async function getMetrics(serial) {
-  const apiRoot = location.hostname.endsWith('github.io') ? 'https://ml-cylinder-api-kang0840.onrender.com/' : location.href;
+  const apiRoot = location.hostname.endsWith('github.io') ? 'https://ml-cylinder.onrender.com/' : location.href;
   try {
     const response = await fetch(new URL(`api/metrics?serial=${encodeURIComponent(serial)}`, apiRoot));
     if (!response.ok) throw new Error('데이터를 불러오지 못했습니다.');
