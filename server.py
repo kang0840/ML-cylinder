@@ -13,6 +13,8 @@ import time
 
 from flask import Flask, jsonify, make_response, request, send_from_directory
 
+from src.factory_twin import FactoryDigitalTwin
+
 try:
     import psycopg
 except ImportError:
@@ -280,6 +282,7 @@ class MetricsState:
 
 
 metrics_state = MetricsState()
+factory_twin = FactoryDigitalTwin()
 
 SERIAL_PATTERN = re.compile(r"^SCC-[A-Z0-9]{4}-[A-Z0-9]{4}$")
 
@@ -347,6 +350,51 @@ def api_metrics():
     if not serial or not storage.exists(serial):
         return jsonify({"error": "invalid_serial", "message": "유효한 시리얼 넘버를 제공해야 합니다."}), 400
     return jsonify(metrics_state.get(serial))
+
+
+@app.route("/api/conveyor")
+def api_conveyor():
+    equipment_id = request.args.get("conveyor_id", "").strip().upper()
+    if equipment_id:
+        try:
+            return jsonify(factory_twin.read_conveyor(equipment_id))
+        except KeyError:
+            return jsonify({"error": "unknown_conveyor", "available": list(factory_twin.conveyors)}), 404
+    return jsonify({
+        "timestamp": datetime.datetime.now(datetime.timezone.utc).isoformat(),
+        "conveyors": [factory_twin.read_conveyor(item) for item in factory_twin.conveyors],
+    })
+
+
+@app.route("/api/cylinder")
+def api_cylinder():
+    equipment_id = request.args.get("cylinder_id", "").strip().upper()
+    if equipment_id:
+        try:
+            return jsonify(factory_twin.read_cylinder(equipment_id))
+        except KeyError:
+            return jsonify({"error": "unknown_cylinder", "available": list(factory_twin.cylinders)}), 404
+    return jsonify({
+        "timestamp": datetime.datetime.now(datetime.timezone.utc).isoformat(),
+        "cylinders": [factory_twin.read_cylinder(item) for item in factory_twin.cylinders],
+    })
+
+
+@app.route("/api/history")
+def api_factory_history():
+    equipment_type = request.args.get("type", "").strip().lower()
+    if equipment_type not in {"", "conveyor", "cylinder"}:
+        return jsonify({"error": "invalid_type", "allowed": ["conveyor", "cylinder"]}), 400
+    try:
+        limit = int(request.args.get("limit", "100"))
+    except ValueError:
+        return jsonify({"error": "invalid_limit"}), 400
+    if not 1 <= limit <= 300:
+        return jsonify({"error": "invalid_limit", "range": [1, 300]}), 400
+    return jsonify({
+        "type": equipment_type or "all",
+        "history": factory_twin.history_items(equipment_type, limit),
+    })
 
 
 @app.route("/api/admin/serials")
