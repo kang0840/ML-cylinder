@@ -317,6 +317,8 @@ def build_cors_response(response):
     origin = request.headers.get("Origin", "")
     if origin == allowed or (not DATABASE_URL and origin.startswith("http://localhost")):
         response.headers["Access-Control-Allow-Origin"] = origin
+        response.headers["Access-Control-Allow-Methods"] = "GET, POST, OPTIONS"
+        response.headers["Access-Control-Allow-Headers"] = "Content-Type, Authorization"
         response.headers["Vary"] = "Origin"
     return response
 
