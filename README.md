@@ -76,11 +76,12 @@ Smart Cylinder Monitoring System은 ADXL345 가속도 센서와 INMP441 마이�
 2. 저장소를 내려받은 뒤 프로젝트 루트 디렉터리로 이동합니다.
 3. 루트의 `requirements.txt`에 정의된 패키지를 설치합니다.
 4. 웹 서비스를 사용할 경우 `ADMIN_PASSWORD`를 설정합니다. PostgreSQL을 사용할 때는 `DATABASE_URL`을 추가하고, 허용할 프런트엔드 주소가 있다면 `ALLOWED_ORIGIN`을 설정합니다.
-5. Windows에서는 `start-server.bat`을 실행하거나 `server.py`를 직접 실행합니다.
+5. Windows에서는 `start-server.bat`을 실행하거나 프로젝트 루트의 `main.py`를 직접 실행합니다.
 6. 브라우저에서 `http://127.0.0.1:8000`에 접속합니다.
-7. AI 분석을 실행하려면 프로젝트 루트의 `smart_cylinder_ai.py`를 실행합니다.
-8. 분석이 완료되면 `smart_cylinder_result.json`과 `smart_cylinder_training.xlsx`에서 결과 및 누적 데이터를 확인합니다.
-9. 기능 검증이 필요한 경우 `tests` 디렉터리의 테스트를 pytest로 실행합니다.
+7. `main.py`가 컨베이어·실린더 모델을 학습하고 Flask 서버와 Excel 기반 연속 추론 작업을 한 번에 시작합니다.
+8. 최신 추론 결과는 `smart_cylinder_result.json`, 누적 학습 데이터는 `smart_cylinder_training.xlsx`에서 확인합니다.
+9. 종료할 때는 실행 창에서 `Ctrl+C`를 누릅니다. 서버와 백그라운드 추론 작업이 함께 종료됩니다.
+10. 기능 검증이 필요한 경우 `tests` 디렉터리의 테스트를 pytest로 실행합니다.
 
 ## AI 사용 내역
 
@@ -115,6 +116,7 @@ ML-cylinder-main/
 ├── smart_cylinder_ai.py            # AI 분석 실행 파일
 ├── smart_cylinder_training.xlsx    # 학습 및 측정 데이터
 ├── smart_cylinder_result.json      # 최신 AI 분석 결과
+├── main.py                         # 서버·학습·추론 통합 실행 파일
 ├── server.py                       # Flask API 및 정적 웹 서버
 ├── requirements.txt                # 웹 서버 및 AI 공통 의존성
 ├── render.yaml                     # Render 배포 설정
