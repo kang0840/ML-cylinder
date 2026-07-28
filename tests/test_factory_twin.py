@@ -8,8 +8,11 @@ def test_assets_use_different_sensor_schemas_and_models():
 
     assert set(CONVEYOR_FEATURES).issubset(conveyor)
     assert set(CYLINDER_FEATURES).issubset(cylinder)
-    assert "pressure_mpa" not in conveyor
-    assert "motor_current_a" not in cylinder
+    assert "pressure_mpa" not in cylinder
+    assert "motor_current_a" not in conveyor
+    assert "temperature_c" not in conveyor
+    assert conveyor["sensors"] == ["ADXL345", "INMP441"]
+    assert cylinder["sensors"] == ["ADXL345", "INMP441"]
     assert conveyor["ai"]["model"] != cylinder["ai"]["model"]
 
 
@@ -18,12 +21,12 @@ def test_dummy_sensor_values_stay_in_physical_operating_ranges():
     conveyor = twin.read_conveyor("CV-02")
     cylinder = twin.read_cylinder("CY-02")
 
-    assert 750 <= conveyor["motor_speed_rpm"] <= 1650
-    assert 0.5 <= conveyor["motor_current_a"] <= 8.0
-    assert 20 <= conveyor["temperature_c"] <= 105
-    assert 0.2 <= cylinder["pressure_mpa"] <= 0.58
-    assert 25 <= cylinder["sound_rms_db"] <= 85
-    assert cylinder["peak_mm_s"] >= cylinder["vibration_rms_mm_s"]
+    assert 0.005 <= conveyor["acceleration_rms_g"] <= 0.5
+    assert conveyor["acceleration_peak_g"] >= conveyor["acceleration_rms_g"]
+    assert 0 <= conveyor["harmonic_energy_ratio"] <= 1
+    assert -80 <= cylinder["sound_rms_dbfs"] <= -1
+    assert cylinder["acceleration_peak_g"] >= cylinder["acceleration_rms_g"]
+    assert 0 <= cylinder["leak_band_energy_ratio"] <= 1
 
 
 def test_history_can_be_filtered_by_asset_type():
@@ -47,4 +50,3 @@ def test_factory_api_returns_independent_equipment_data():
     assert {item["conveyor_id"] for item in conveyors} == {"CV-01", "CV-02"}
     assert {item["cylinder_id"] for item in cylinders} == {"CY-01", "CY-02"}
     assert history and all(item["equipment_type"] == "cylinder" for item in history)
-

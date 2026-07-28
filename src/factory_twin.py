@@ -11,19 +11,22 @@ from sklearn.ensemble import RandomForestClassifier
 
 
 CONVEYOR_FEATURES = (
-    "motor_speed_rpm",
-    "motor_current_a",
-    "temperature_c",
-    "vibration_rms_mm_s",
-    "belt_slip_percent",
+    "acceleration_rms_g",
+    "acceleration_peak_g",
+    "crest_factor",
+    "dominant_vibration_frequency_hz",
+    "harmonic_energy_ratio",
+    "sound_rms_dbfs",
+    "acoustic_high_band_ratio",
 )
 CYLINDER_FEATURES = (
-    "pressure_mpa",
-    "vibration_rms_mm_s",
-    "peak_mm_s",
+    "acceleration_rms_g",
+    "acceleration_peak_g",
     "crest_factor",
-    "sound_rms_db",
-    "dominant_frequency_hz",
+    "sound_rms_dbfs",
+    "impact_energy_g2_s",
+    "stroke_duration_ms",
+    "leak_band_energy_ratio",
 )
 
 
@@ -32,42 +35,47 @@ def _utc_now() -> str:
 
 
 def _conveyor_measurement(
-    severity: float, load: float, setpoint: float, rng: np.random.Generator,
+    severity: float, shaft_frequency: float, rng: np.random.Generator,
 ) -> dict[str, float]:
-    """Model a geared conveyor motor with load, bearing wear and belt slip."""
+    """Features obtainable from continuous ADXL345 and INMP441 signals."""
     bearing_wear = np.clip(severity + rng.normal(0.0, 0.025), 0.0, 1.15)
-    slip = np.clip(0.15 + 5.8 * severity ** 2 + rng.normal(0.0, 0.12), 0.0, 8.0)
-    speed = setpoint * (1.0 - slip / 100.0) + rng.normal(0.0, 5.0)
-    current = 0.75 + 2.55 * load + 2.1 * bearing_wear + rng.normal(0.0, 0.08)
-    temperature = 23.0 + 5.8 * current + 13.5 * bearing_wear + rng.normal(0.0, 0.6)
-    vibration = 0.42 + 0.25 * load + 4.9 * bearing_wear ** 1.45 + rng.normal(0.0, 0.07)
+    acceleration_rms = 0.028 + 0.19 * bearing_wear ** 1.45 + rng.normal(0.0, 0.003)
+    crest = 1.55 + 2.0 * bearing_wear + rng.normal(0.0, 0.07)
+    peak = acceleration_rms * crest
+    dominant_frequency = shaft_frequency * (1.0 + rng.normal(0.0, 0.004))
+    harmonic_ratio = 0.10 + 0.55 * bearing_wear + rng.normal(0.0, 0.018)
+    sound = -34.0 + 15.0 * bearing_wear + rng.normal(0.0, 0.7)
+    high_band = 0.08 + 0.50 * bearing_wear ** 1.3 + rng.normal(0.0, 0.015)
     return {
-        "motor_speed_rpm": float(np.clip(speed, 750.0, 1_650.0)),
-        "motor_current_a": float(np.clip(current, 0.5, 8.0)),
-        "temperature_c": float(np.clip(temperature, 20.0, 105.0)),
-        "vibration_rms_mm_s": float(np.clip(vibration, 0.1, 9.0)),
-        "belt_slip_percent": float(slip),
+        "acceleration_rms_g": float(np.clip(acceleration_rms, 0.005, 0.5)),
+        "acceleration_peak_g": float(np.clip(peak, 0.01, 2.0)),
+        "crest_factor": float(np.clip(crest, 1.1, 5.0)),
+        "dominant_vibration_frequency_hz": float(np.clip(dominant_frequency, 5.0, 200.0)),
+        "harmonic_energy_ratio": float(np.clip(harmonic_ratio, 0.0, 1.0)),
+        "sound_rms_dbfs": float(np.clip(sound, -80.0, -1.0)),
+        "acoustic_high_band_ratio": float(np.clip(high_band, 0.0, 1.0)),
     }
 
 
 def _cylinder_measurement(
-    severity: float, supply_pressure: float, rng: np.random.Generator,
+    severity: float, nominal_stroke_ms: float, rng: np.random.Generator,
 ) -> dict[str, float]:
-    """Model a pneumatic cylinder with leakage, seal friction and end impact."""
-    leakage = np.clip(0.008 + 0.17 * severity ** 1.7 + rng.normal(0.0, 0.003), 0.0, 0.22)
-    pressure = supply_pressure - leakage - 0.018 * severity + rng.normal(0.0, 0.004)
-    vibration = 0.62 + 4.35 * severity ** 1.55 + rng.normal(0.0, 0.055)
-    crest = 1.42 + 1.48 * severity + rng.normal(0.0, 0.045)
-    peak = vibration * crest + rng.normal(0.0, 0.06)
-    sound = 31.0 + 22.0 * leakage / 0.22 + 12.0 * severity + rng.normal(0.0, 0.5)
-    frequency = 82.0 + 11.0 * severity + rng.normal(0.0, 0.45)
+    """Event features obtainable from ADXL345 impacts and INMP441 audio."""
+    acceleration_rms = 0.045 + 0.16 * severity ** 1.25 + rng.normal(0.0, 0.004)
+    crest = 2.2 + 3.1 * severity + rng.normal(0.0, 0.09)
+    peak = acceleration_rms * crest
+    impact_energy = 0.002 + 0.035 * severity ** 1.6 + rng.normal(0.0, 0.0008)
+    stroke_duration = nominal_stroke_ms * (1.0 + 0.36 * severity) + rng.normal(0.0, 5.0)
+    sound = -39.0 + 21.0 * severity + rng.normal(0.0, 0.7)
+    leak_band = 0.06 + 0.67 * severity ** 1.5 + rng.normal(0.0, 0.015)
     return {
-        "pressure_mpa": float(np.clip(pressure, 0.2, 0.58)),
-        "vibration_rms_mm_s": float(np.clip(vibration, 0.1, 8.0)),
-        "peak_mm_s": float(np.clip(peak, 0.1, 20.0)),
-        "crest_factor": float(np.clip(crest, 1.0, 4.5)),
-        "sound_rms_db": float(np.clip(sound, 25.0, 85.0)),
-        "dominant_frequency_hz": float(np.clip(frequency, 60.0, 120.0)),
+        "acceleration_rms_g": float(np.clip(acceleration_rms, 0.005, 0.5)),
+        "acceleration_peak_g": float(np.clip(peak, 0.01, 3.0)),
+        "crest_factor": float(np.clip(crest, 1.2, 8.0)),
+        "sound_rms_dbfs": float(np.clip(sound, -80.0, -1.0)),
+        "impact_energy_g2_s": float(np.clip(impact_energy, 0.0001, 0.1)),
+        "stroke_duration_ms": float(np.clip(stroke_duration, 80.0, 1_000.0)),
+        "leak_band_energy_ratio": float(np.clip(leak_band, 0.0, 1.0)),
     }
 
 
@@ -78,7 +86,7 @@ def _fit_conveyor_model(seed: int = 42) -> RandomForestClassifier:
     for low, high, label in ranges:
         for _ in range(450):
             values = _conveyor_measurement(
-                rng.uniform(low, high), rng.uniform(0.35, 0.95), rng.uniform(1_050, 1_450), rng,
+                rng.uniform(low, high), rng.uniform(17.0, 25.0), rng,
             )
             rows.append([values[name] for name in CONVEYOR_FEATURES])
             labels.append(label)
@@ -94,7 +102,7 @@ def _fit_cylinder_model(seed: int = 84) -> RandomForestClassifier:
     ranges = ((0.0, 0.22, "A"), (0.27, 0.48, "B"), (0.53, 0.74, "C"), (0.8, 1.0, "D"))
     for low, high, label in ranges:
         for _ in range(400):
-            values = _cylinder_measurement(rng.uniform(low, high), rng.uniform(0.48, 0.52), rng)
+            values = _cylinder_measurement(rng.uniform(low, high), rng.uniform(240.0, 420.0), rng)
             rows.append([values[name] for name in CYLINDER_FEATURES])
             labels.append(label)
     return RandomForestClassifier(
@@ -112,12 +120,12 @@ class FactoryDigitalTwin:
         self.conveyor_model = _fit_conveyor_model()
         self.cylinder_model = _fit_cylinder_model()
         self.conveyors = {
-            "CV-01": {"severity": 0.12, "load": 0.58, "setpoint": 1_200.0, "hours": 812.0},
-            "CV-02": {"severity": 0.31, "load": 0.72, "setpoint": 1_350.0, "hours": 1_426.0},
+            "CV-01": {"severity": 0.12, "shaft_frequency": 20.0},
+            "CV-02": {"severity": 0.31, "shaft_frequency": 22.5},
         }
         self.cylinders = {
-            "CY-01": {"severity": 0.10, "supply": 0.50, "cycles": 186_420},
-            "CY-02": {"severity": 0.36, "supply": 0.49, "cycles": 294_810},
+            "CY-01": {"severity": 0.10, "nominal_stroke_ms": 280.0, "detected_cycles": 0},
+            "CY-02": {"severity": 0.36, "nominal_stroke_ms": 360.0, "detected_cycles": 0},
         }
         self.history: deque[dict[str, object]] = deque(maxlen=history_size)
 
@@ -133,18 +141,18 @@ class FactoryDigitalTwin:
             if equipment_id not in self.conveyors:
                 raise KeyError(equipment_id)
             state = self.conveyors[equipment_id]
-            state["load"] = float(np.clip(state["load"] + self.rng.normal(0.0, 0.012), 0.3, 1.0))
-            state["hours"] += 1.0 / 3_600.0
+            state["shaft_frequency"] = float(np.clip(
+                state["shaft_frequency"] + self.rng.normal(0.0, 0.025), 10.0, 30.0,
+            ))
             self._advance(state, 0.000025)
-            sensor = _conveyor_measurement(state["severity"], state["load"], state["setpoint"], self.rng)
+            sensor = _conveyor_measurement(state["severity"], state["shaft_frequency"], self.rng)
             vector = np.asarray([[sensor[name] for name in CONVEYOR_FEATURES]])
             status = str(self.conveyor_model.predict(vector)[0])
             confidence = float(np.max(self.conveyor_model.predict_proba(vector)[0]))
             result: dict[str, object] = {
                 "timestamp": _utc_now(), "equipment_type": "conveyor", "conveyor_id": equipment_id,
+                "sensors": ["ADXL345", "INMP441"],
                 **{name: round(value, 3) for name, value in sensor.items()},
-                "load_percent": round(state["load"] * 100.0, 1),
-                "operating_hours": round(state["hours"], 3),
                 "status": status,
                 "ai": {"model": "conveyor_random_forest", "confidence": round(confidence, 4)},
             }
@@ -156,10 +164,11 @@ class FactoryDigitalTwin:
             if equipment_id not in self.cylinders:
                 raise KeyError(equipment_id)
             state = self.cylinders[equipment_id]
-            state["supply"] = float(np.clip(state["supply"] + self.rng.normal(0.0, 0.0012), 0.46, 0.53))
-            state["cycles"] += 1
+            state["detected_cycles"] += 1
             self._advance(state, 0.00004)
-            sensor = _cylinder_measurement(state["severity"], state["supply"], self.rng)
+            sensor = _cylinder_measurement(
+                state["severity"], state["nominal_stroke_ms"], self.rng,
+            )
             vector = np.asarray([[sensor[name] for name in CYLINDER_FEATURES]])
             zone = str(self.cylinder_model.predict(vector)[0])
             confidence = float(np.max(self.cylinder_model.predict_proba(vector)[0]))
@@ -168,9 +177,10 @@ class FactoryDigitalTwin:
             remaining_life = max(0, round((1.0 - state["severity"]) * 360_000))
             result: dict[str, object] = {
                 "timestamp": _utc_now(), "equipment_type": "cylinder", "cylinder_id": equipment_id,
+                "sensors": ["ADXL345", "INMP441"],
                 **{name: round(value, 3) for name, value in sensor.items()},
-                "cycle_count": int(state["cycles"]), "zone": zone,
-                "health_score": health_score, "remaining_life_cycles": remaining_life,
+                "detected_cycle_count_session": int(state["detected_cycles"]), "zone": zone,
+                "health_score": health_score, "estimated_remaining_cycles": remaining_life,
                 "status": "NORMAL" if zone == "A" else "WARNING" if zone in {"B", "C"} else "ERROR",
                 "ai": {"model": "cylinder_random_forest", "confidence": round(confidence, 4)},
             }
@@ -183,4 +193,3 @@ class FactoryDigitalTwin:
         if equipment_type:
             items = [item for item in items if item["equipment_type"] == equipment_type]
         return items[-limit:]
-
