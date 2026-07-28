@@ -2,6 +2,8 @@
 
 진동·소음 데이터를 기반으로 공압 실린더의 상태를 분석하고, 이상 징후를 조기에 확인할 수 있도록 지원하는 AI 기반 예지보전 학생 프로젝트입니다.
 
+**GitHub 저장소:** [https://github.com/kang0840/ML-cylinder](https://github.com/kang0840/ML-cylinder)
+
 ## 프로젝트 소개
 
 Smart Cylinder Monitoring System은 ADXL345 가속도 센서와 INMP441 마이크에서 수집되는 데이터를 분석하여 공압 실린더의 상태를 A~D 등급으로 분류하는 시스템입니다. 현재 저장소에서는 실제 센서 연결 전에도 전체 분석 과정을 검증할 수 있도록 센서 시뮬레이터를 제공합니다.
