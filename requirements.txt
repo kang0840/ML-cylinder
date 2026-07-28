@@ -1,0 +1,6 @@
+psycopg[binary]>=3.2,<4
+numpy
+scikit-learn
+openpyxl
+Flask>=3.0,<4.0
+gunicorn>=22.0,<24.0

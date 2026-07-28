@@ -1,0 +1,61 @@
+{
+  "timestamp": "2026-07-27T23:47:15.608388+00:00",
+  "sensors": {
+    "vibration": "ADXL345",
+    "sound": "INMP441 (글루건 처리)"
+  },
+  "sampling": {
+    "rate_hz": 3200.0,
+    "duration_seconds": 1.0,
+    "samples": 3200,
+    "analysis_band_hz": [
+      2.0,
+      1000.0
+    ]
+  },
+  "features": {
+    "rms_velocity_mm_s": 1.7858811117719255,
+    "peak_velocity_mm_s": 3.625786051810513,
+    "crest_factor": 2.030250517747545,
+    "dominant_frequency_hz": 84.0,
+    "sound_rms": 42.82231529789331,
+    "operating_hours": 100.0
+  },
+  "statistical_zone": {
+    "label": 3,
+    "zone": "D",
+    "max_abs_z_score": 25.606827246796108,
+    "controlling_feature": "peak_velocity_mm_s",
+    "feature_z_scores": {
+      "rms_velocity_mm_s": 22.32573361297956,
+      "peak_velocity_mm_s": 25.606827246796108,
+      "crest_factor": 12.430966291399377,
+      "dominant_frequency_hz": 4.771685890200395,
+      "sound_rms": 9.984356219363528
+    }
+  },
+  "ai_prediction": {
+    "model": "RandomForestClassifier",
+    "label": 1,
+    "zone": "B",
+    "status": "양호",
+    "confidence": 0.465,
+    "oob_validation_accuracy": 1.0,
+    "real_sensor_accuracy": null,
+    "accuracy_note": "학습 외 표본 정확도; 실제 센서 정확도가 아님",
+    "training_source": "smart_cylinder_training.xlsx",
+    "training_rows": 800
+  },
+  "health_score": 75,
+  "rul_estimate": {
+    "basis": "unavailable_without_run_to_failure_data",
+    "status": "insufficient_lifecycle_data",
+    "hours_to_zone_d": null,
+    "rms_rate_mm_s_per_hour": 0.011684158496507877,
+    "experimental_zone_d_projection_hours": 0.0
+  },
+  "standards_note": {
+    "signal_evaluation": "ISO 20816/ISO 13373 based workflow",
+    "zone_health_rul_ml": "Project Criteria; validate on the FSQD cylinder"
+  }
+}
