@@ -2,7 +2,7 @@
 
 진동·소음 데이터를 기반으로 공압 실린더의 상태를 분석하고, 이상 징후를 조기에 확인할 수 있도록 지원하는 AI 기반 예지보전 학생 프로젝트입니다.
 
-**GitHub 저장소:** [https://github.com/kang0840/ML-cylinder](https://github.com/kang0840/ML-cylinder)
+**배포 서버:** [https://ml-cylinder.onrender.com](https://ml-cylinder.onrender.com)
 
 ## 프로젝트 소개
 
