@@ -4,6 +4,8 @@
 
 **배포 서버:** [https://ml-cylinder.onrender.com](https://ml-cylinder.onrender.com)
 
+**관리자 페이지:** [https://ml-cylinder.onrender.com/admin.html](https://ml-cylinder.onrender.com/admin.html)
+
 ## 프로젝트 소개
 
 Smart Cylinder Monitoring System은 ADXL345 가속도 센서와 INMP441 마이크에서 수집되는 데이터를 분석하여 공압 실린더의 상태를 A~D 등급으로 분류하는 시스템입니다. 현재 저장소에서는 실제 센서 연결 전에도 전체 분석 과정을 검증할 수 있도록 센서 시뮬레이터를 제공합니다.
