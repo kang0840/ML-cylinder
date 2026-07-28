@@ -196,92 +196,6 @@ def initialize_admin():
 initialize_admin()
 
 
-class MetricsState:
-    def __init__(self):
-        self.states = {}
-
-    def get(self, serial: str) -> dict:
-        state = self.states.get(serial)
-        if state is None:
-            state = self._initialize(serial)
-            self.states[serial] = state
-        self._advance(state)
-        return {
-            "serial": serial,
-            "timestamp": datetime.datetime.utcnow().isoformat() + "Z",
-            "discharge": {
-                "good": state["good"],
-                "defect": state["defect"],
-                "noArrival": state["noArrival"],
-            },
-            "machining": {
-                "pressure": round(state["machPressure"], 1),
-                "cycles": state["machCycles"],
-                "temperature": round(state["machTemp"], 1),
-                "position": state["machPos"],
-                "fault": state["machFault"],
-            },
-            "conveyor": {
-                "speed": round(state["convSpeed"], 1),
-                "count": state["convCount"],
-            },
-            "vision": {
-                "good": state["vGood"],
-                "bad": state["vBad"],
-                "rate": round(state["vGood"] / max(1, state["vGood"] + state["vBad"]) * 100, 1),
-                "lastResult": state["lastResult"],
-            },
-            "event": state["lastEvent"],
-            "system": {"status": "run" if not state["machFault"] else "fault"},
-        }
-
-    def _initialize(self, serial: str) -> dict:
-        seed = sum(ord(ch) for ch in serial)
-        rng = random.Random(seed)
-        return {
-            "good": rng.randint(8, 18),
-            "defect": rng.randint(0, 4),
-            "noArrival": rng.randint(0, 2),
-            "machCycles": rng.randint(20, 36),
-            "machTemp": rng.uniform(42.0, 47.0),
-            "machPressure": rng.uniform(3.6, 4.8),
-            "machPos": rng.randint(35, 70),
-            "machFault": False,
-            "convSpeed": rng.uniform(1.1, 1.7),
-            "convCount": rng.randint(120, 220),
-            "vGood": rng.randint(26, 36),
-            "vBad": rng.randint(0, 6),
-            "lastResult": "GOOD",
-            "lastEvent": "시스템이 초기화되었습니다. 모니터링을 시작합니다.",
-        }
-
-    def _advance(self, state: dict):
-        state["good"] += random.randint(0, 2)
-        state["defect"] += random.choice((0, 0, 1))
-        state["noArrival"] += random.choice((0, 0, 0, 1))
-        state["machCycles"] += 1
-        state["machTemp"] = max(38.0, min(58.0, state["machTemp"] + random.uniform(-0.4, 0.5)))
-        state["machPressure"] = max(2.5, min(6.5, state["machPressure"] + random.uniform(-0.4, 0.4)))
-        state["machPos"] = min(100, max(0, state["machPos"] + random.randint(-3, 5)))
-        state["convSpeed"] = max(0.9, min(2.2, state["convSpeed"] + random.uniform(-0.12, 0.12)))
-        state["convCount"] += random.randint(1, 4)
-        if random.random() < 0.18 or state["machTemp"] > 53.5:
-            state["machFault"] = True
-        elif random.random() < 0.16:
-            state["machFault"] = False
-        outcome = "GOOD" if random.random() < 0.84 else "DEFECT"
-        state["lastResult"] = outcome
-        if outcome == "GOOD":
-            state["vGood"] += 1
-            state["lastEvent"] = "비전 검사 완료 · 양품 PASS"
-        else:
-            state["vBad"] += 1
-            state["lastEvent"] = "비전 검사 완료 · 불량 FAIL"
-        if state["machFault"]:
-            state["lastEvent"] = "⚠ 가공 실린더 이상 감지 · 점검 필요"
-
-
-metrics_state = MetricsState()
 factory_twin = FactoryDigitalTwin()
 
 SERIAL_PATTERN = re.compile(r"^SCC-[A-Z0-9]{4}-[A-Z0-9]{4}$")
@@ -342,14 +256,6 @@ def health():
 def api_validate():
     serial = normalize_serial(request.args.get("serial", ""))
     return jsonify({"serial": serial, "valid": bool(serial and storage.exists(serial))})
-
-
-@app.route("/api/metrics")
-def api_metrics():
-    serial = normalize_serial(request.args.get("serial", ""))
-    if not serial or not storage.exists(serial):
-        return jsonify({"error": "invalid_serial", "message": "유효한 시리얼 넘버를 제공해야 합니다."}), 400
-    return jsonify(metrics_state.get(serial))
 
 
 @app.route("/api/conveyor")

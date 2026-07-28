@@ -50,3 +50,25 @@ def test_factory_api_returns_independent_equipment_data():
     assert {item["conveyor_id"] for item in conveyors} == {"CV-01", "CV-02"}
     assert {item["cylinder_id"] for item in cylinders} == {"CY-01", "CY-02"}
     assert history and all(item["equipment_type"] == "cylinder" for item in history)
+
+
+def test_legacy_random_metrics_endpoint_is_removed():
+    from server import app
+
+    response = app.test_client().get("/api/metrics?serial=SCC-TEST-TEST")
+    assert response.status_code == 404
+
+
+def test_monitoring_page_uses_only_two_sensor_api_fields():
+    from pathlib import Path
+
+    public = Path(__file__).parents[1] / "public"
+    page = (public / "monitoring.html").read_text(encoding="utf-8")
+    script = (public / "monitor.js").read_text(encoding="utf-8")
+    combined = page + script
+
+    assert "api/conveyor" in script
+    assert "api/cylinder" in script
+    assert "api/metrics" not in combined
+    for forbidden in ("motor_current_a", "temperature_c", "pressure_mpa", "belt_slip_percent"):
+        assert forbidden not in combined

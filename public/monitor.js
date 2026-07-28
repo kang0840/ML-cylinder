@@ -1,104 +1,166 @@
-const query = Object.fromEntries(new URLSearchParams(location.search));
-const number = value => Number(value).toLocaleString('ko-KR');
+const API_ROOT = 'https://ml-cylinder.onrender.com/';
+const MAX_POINTS = 40;
+const series = {
+  conveyor: { rms: [], sound: [] },
+  cylinder: { rms: [], sound: [] }
+};
 
-function rngFor(text) {
-  let state = Array.from(text).reduce((sum, char) => sum + char.charCodeAt(0), 0) >>> 0;
-  return () => {
-    state = (state + 0x6D2B79F5) >>> 0;
-    let value = state;
-    value = Math.imul(value ^ value >>> 15, value | 1);
-    value ^= value + Math.imul(value ^ value >>> 7, value | 61);
-    return ((value ^ value >>> 14) >>> 0) / 4294967296;
-  };
+const $ = id => document.getElementById(id);
+const number = (value, digits = 3) => Number(value).toFixed(digits);
+const percent = value => `${(Number(value) * 100).toFixed(1)}%`;
+
+async function api(path) {
+  const response = await fetch(new URL(path, API_ROOT), { headers: { Accept: 'application/json' } });
+  if (!response.ok) throw new Error(`API ${response.status}`);
+  return response.json();
 }
 
-function demoMetrics(serial) {
-  const random = rngFor(serial + Math.floor(Date.now() / 5000));
-  const good = 12 + Math.floor(random() * 10);
-  const defect = Math.floor(random() * 4);
-  const noArrival = Math.floor(random() * 3);
-  const visionGood = 24 + Math.floor(random() * 16);
-  const visionBad = Math.floor(random() * 6);
-  const fault = random() > 0.84;
-  return {
-    discharge: { good, defect, noArrival },
-    machining: {
-      pressure: +(3.6 + random() * 1.2).toFixed(1),
-      cycles: 20 + Math.floor(random() * 18),
-      temperature: +(41 + random() * 8).toFixed(1),
-      position: 35 + Math.floor(random() * 40), fault
-    },
-    conveyor: { speed: +(1.1 + random() * 0.7).toFixed(1), count: 120 + Math.floor(random() * 120) },
-    vision: {
-      good: visionGood, bad: visionBad,
-      rate: +(visionGood / (visionGood + visionBad || 1) * 100).toFixed(1),
-      lastResult: random() > 0.82 ? 'DEFECT' : 'GOOD'
-    },
-    event: fault ? '⚠ 가공 실린더 이상 감지 · 점검 필요' : '비전 검사 완료 · 양품 PASS',
-    system: { status: fault ? 'fault' : 'run' }
-  };
+function setStatus(element, status, label = status) {
+  element.className = `status ${status.toLowerCase()}`;
+  element.innerHTML = '<i class="dot"></i>';
+  element.append(document.createTextNode(label));
 }
 
-async function getMetrics(serial) {
-  const apiRoot = location.hostname.endsWith('github.io') ? 'https://ml-cylinder.onrender.com/' : location.href;
+function updateConveyor(data) {
+  $('conveyorTitle').textContent = `컨베이어 · ${data.conveyor_id}`;
+  setStatus($('conveyorStatus'), data.status);
+  $('cvRms').textContent = `${number(data.acceleration_rms_g)} g`;
+  $('cvFrequency').textContent = `${number(data.dominant_vibration_frequency_hz, 2)} Hz`;
+  $('cvConfidence').textContent = percent(data.ai.confidence);
+  $('cvPeak').textContent = `${number(data.acceleration_peak_g)} g`;
+  $('cvCrest').textContent = number(data.crest_factor);
+  $('cvHarmonic').textContent = percent(data.harmonic_energy_ratio);
+  $('cvSound').textContent = `${number(data.sound_rms_dbfs, 1)} dBFS`;
+  $('cvHighBand').textContent = percent(data.acoustic_high_band_ratio);
+  $('cvModel').textContent = data.ai.model;
+}
+
+function updateCylinder(data) {
+  $('cylinderTitle').textContent = `가공 실린더 · ${data.cylinder_id}`;
+  setStatus($('cylinderStatus'), data.status, `${data.status} · Zone ${data.zone}`);
+  $('cyZone').textContent = data.zone;
+  $('cyHealth').textContent = `${data.health_score}/100`;
+  $('cyConfidence').textContent = percent(data.ai.confidence);
+  $('cyRms').textContent = `${number(data.acceleration_rms_g)} g`;
+  $('cyPeak').textContent = `${number(data.acceleration_peak_g)} g`;
+  $('cyCrest').textContent = number(data.crest_factor);
+  $('cyImpact').textContent = `${number(data.impact_energy_g2_s, 4)} g²·s`;
+  $('cyStroke').textContent = `${number(data.stroke_duration_ms, 1)} ms`;
+  $('cyLeak').textContent = percent(data.leak_band_energy_ratio);
+  $('cySound').textContent = `${number(data.sound_rms_dbfs, 1)} dBFS`;
+  $('cyCycles').textContent = Number(data.detected_cycle_count_session).toLocaleString('ko-KR');
+  $('cyRemaining').textContent = `약 ${Number(data.estimated_remaining_cycles).toLocaleString('ko-KR')} 회`;
+  $('cyModel').textContent = data.ai.model;
+}
+
+function appendSeries(type, data) {
+  series[type].rms.push(Number(data.acceleration_rms_g));
+  series[type].sound.push(Number(data.sound_rms_dbfs));
+  for (const key of ['rms', 'sound']) {
+    if (series[type][key].length > MAX_POINTS) series[type][key].shift();
+  }
+}
+
+function drawChart(canvas, first, second, options) {
+  const ratio = window.devicePixelRatio || 1;
+  const width = canvas.clientWidth;
+  const height = canvas.clientHeight;
+  if (canvas.width !== Math.round(width * ratio) || canvas.height !== Math.round(height * ratio)) {
+    canvas.width = Math.round(width * ratio);
+    canvas.height = Math.round(height * ratio);
+  }
+  const ctx = canvas.getContext('2d');
+  ctx.setTransform(ratio, 0, 0, ratio, 0, 0);
+  ctx.clearRect(0, 0, width, height);
+  const pad = { left: 44, right: 14, top: 14, bottom: 25 };
+  const plotWidth = width - pad.left - pad.right;
+  const plotHeight = height - pad.top - pad.bottom;
+  const values = [...first, ...second];
+  let min = values.length ? Math.min(...values) : options.defaultMin;
+  let max = values.length ? Math.max(...values) : options.defaultMax;
+  const margin = Math.max((max - min) * 0.2, options.minMargin);
+  min -= margin; max += margin;
+  ctx.strokeStyle = '#22313b'; ctx.fillStyle = '#718592'; ctx.font = '10px monospace'; ctx.lineWidth = 1;
+  for (let i = 0; i <= 4; i += 1) {
+    const y = pad.top + plotHeight * i / 4;
+    ctx.beginPath(); ctx.moveTo(pad.left, y); ctx.lineTo(width - pad.right, y); ctx.stroke();
+    const label = (max - (max - min) * i / 4).toFixed(options.decimals);
+    ctx.fillText(label, 5, y + 3);
+  }
+  const drawLine = (data, color) => {
+    if (!data.length) return;
+    ctx.beginPath(); ctx.strokeStyle = color; ctx.lineWidth = 2;
+    data.forEach((value, index) => {
+      const x = pad.left + plotWidth * index / Math.max(MAX_POINTS - 1, 1);
+      const y = pad.top + (max - value) / (max - min || 1) * plotHeight;
+      if (index === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+    });
+    ctx.stroke();
+  };
+  drawLine(first, '#42c7ff');
+  drawLine(second, '#39df88');
+  ctx.fillStyle = '#42c7ff'; ctx.fillRect(width - 145, 8, 10, 3); ctx.fillStyle = '#8ba0ad'; ctx.fillText('컨베이어', width - 130, 13);
+  ctx.fillStyle = '#39df88'; ctx.fillRect(width - 73, 8, 10, 3); ctx.fillStyle = '#8ba0ad'; ctx.fillText('실린더', width - 58, 13);
+}
+
+function drawCharts() {
+  drawChart($('rmsChart'), series.conveyor.rms, series.cylinder.rms, { defaultMin: 0, defaultMax: 0.2, minMargin: 0.01, decimals: 3 });
+  drawChart($('soundChart'), series.conveyor.sound, series.cylinder.sound, { defaultMin: -50, defaultMax: -10, minMargin: 2, decimals: 1 });
+}
+
+function setConnection(ok, message) {
+  const element = $('connection');
+  element.className = `connection ${ok ? 'connected' : 'error'}`;
+  element.innerHTML = '<i class="dot"></i>';
+  element.append(document.createTextNode(message));
+}
+
+async function loadHistory() {
+  const data = await api('api/history?limit=100');
+  const conveyorId = $('conveyorSelect').value;
+  const cylinderId = $('cylinderSelect').value;
+  for (const item of data.history) {
+    if (item.equipment_type === 'conveyor' && item.conveyor_id === conveyorId) appendSeries('conveyor', item);
+    if (item.equipment_type === 'cylinder' && item.cylinder_id === cylinderId) appendSeries('cylinder', item);
+  }
+}
+
+async function refresh() {
+  const conveyorId = $('conveyorSelect').value;
+  const cylinderId = $('cylinderSelect').value;
   try {
-    const response = await fetch(new URL(`api/metrics?serial=${encodeURIComponent(serial)}`, apiRoot));
-    if (!response.ok) throw new Error('데이터를 불러오지 못했습니다.');
-    return response.json();
-  } catch { return demoMetrics(serial); }
+    const [conveyor, cylinder] = await Promise.all([
+      api(`api/conveyor?conveyor_id=${encodeURIComponent(conveyorId)}`),
+      api(`api/cylinder?cylinder_id=${encodeURIComponent(cylinderId)}`)
+    ]);
+    updateConveyor(conveyor);
+    updateCylinder(cylinder);
+    appendSeries('conveyor', conveyor);
+    appendSeries('cylinder', cylinder);
+    drawCharts();
+    const now = new Date();
+    $('timestamp').textContent = `마지막 갱신 ${now.toLocaleString('ko-KR')}`;
+    $('eventTime').textContent = `[${now.toLocaleTimeString('ko-KR', { hour12: false })}]`;
+    const warnings = [conveyor.status !== 'NORMAL' ? `${conveyorId} ${conveyor.status}` : '', cylinder.status !== 'NORMAL' ? `${cylinderId} ${cylinder.status} · Zone ${cylinder.zone}` : ''].filter(Boolean);
+    $('eventText').textContent = warnings.length ? `점검 필요: ${warnings.join(' / ')}` : '두 설비의 센서 신호와 AI 상태가 정상 범위입니다.';
+    setConnection(true, 'SERVER ONLINE');
+  } catch (error) {
+    console.error(error);
+    setConnection(false, 'SERVER OFFLINE');
+    $('eventText').textContent = '서버에서 센서 데이터를 가져오지 못했습니다. 임의 대체값은 표시하지 않습니다.';
+  }
 }
 
-function update(data) {
-  document.getElementById('cyl1-count').textContent = number(data.discharge.good);
-  document.getElementById('cyl2-count').textContent = number(data.discharge.defect);
-  document.getElementById('cyl3-count').textContent = number(data.discharge.noArrival);
-  document.getElementById('mach-cycles').textContent = `${number(data.machining.cycles)} 회`;
-  document.getElementById('mach-temp').textContent = `${data.machining.temperature.toFixed(1)}°C`;
-  document.getElementById('mach-pos').textContent = `${data.machining.position}%`;
-  document.getElementById('pressure-val').textContent = data.machining.pressure.toFixed(1);
-  const arc = document.getElementById('pressure-arc');
-  arc.style.strokeDashoffset = 314 - data.machining.pressure / 6.5 * 314;
-  arc.style.stroke = data.machining.fault ? 'var(--fault)' : 'var(--run)';
-
-  const banner = document.getElementById('mach-banner');
-  const status = document.getElementById('mach-status');
-  banner.className = `state-banner ${data.machining.fault ? 'bad' : 'ok'}`;
-  document.getElementById('mach-banner-text').textContent = data.machining.fault
-    ? '가공 상태 이상 감지 · 온도/압력 확인 필요' : '가공 상태 정상 · 이상 감지 없음';
-  status.className = `panel-status ${data.machining.fault ? 'fault' : 'run'}`;
-  status.innerHTML = `<span class="led${data.machining.fault ? ' fault' : ''}"></span>${data.machining.fault ? '이상 감지' : '정상'}`;
-
-  document.getElementById('conv-speed').textContent = `${data.conveyor.speed.toFixed(1)} m/min`;
-  document.getElementById('conv-count').textContent = number(data.conveyor.count);
-  document.getElementById('v-good').textContent = number(data.vision.good);
-  document.getElementById('v-bad').textContent = number(data.vision.bad);
-  document.getElementById('v-rate').textContent = `${data.vision.rate.toFixed(1)}%`;
-  const badge = document.getElementById('last-badge');
-  const good = data.vision.lastResult === 'GOOD';
-  badge.textContent = `최근 결과 · ${good ? '양품 PASS' : '불량 FAIL'}`;
-  badge.style.color = good ? 'var(--run)' : 'var(--fault)';
-  badge.style.borderColor = good ? 'rgba(61,220,132,.3)' : 'rgba(255,92,92,.3)';
-
-  const time = new Date().toLocaleTimeString('ko-KR', { hour12: false });
-  document.getElementById('log-scroll').innerHTML = `<span>[${time}]</span> ${data.event}`;
-  document.getElementById('sys-text').textContent = data.system.status === 'fault' ? 'SYSTEM FAULT' : 'SYSTEM RUN';
-  document.getElementById('sys-led').className = `led${data.system.status === 'fault' ? ' fault' : ''}`;
+function resetHistory() {
+  for (const type of Object.values(series)) { type.rms.length = 0; type.sound.length = 0; }
+  refresh();
 }
 
-function showError(message) {
-  document.body.innerHTML = `<main style="padding:32px;color:#e7ebef;background:#0a0d10;min-height:100vh;display:grid;place-items:center;text-align:center;font-family:Arial"><div><h1>오류 발생</h1><p>${message}</p><a href="./index.html" style="color:#4fc3f7">제품 소개 페이지로 돌아가기</a></div></main>`;
-}
-
-async function init() {
-  const serial = (query.serial || '').toUpperCase();
-  if (!serial) return showError('시리얼 넘버가 없습니다. 제품 페이지에서 입력해 주세요.');
-  const tag = document.getElementById('serialTag');
-  if (tag) tag.textContent = `SERIAL · ${serial}`;
-  document.querySelectorAll('a[href="https://smart-cylinder-monitor.com"]').forEach(link => {
-    link.href = location.href; link.textContent = location.href.split(/[?#]/)[0];
-  });
-  update(await getMetrics(serial));
-  setInterval(async () => update(await getMetrics(serial)), 5000);
-}
-
-addEventListener('DOMContentLoaded', init);
+addEventListener('DOMContentLoaded', async () => {
+  $('conveyorSelect').addEventListener('change', resetHistory);
+  $('cylinderSelect').addEventListener('change', resetHistory);
+  addEventListener('resize', drawCharts);
+  try { await loadHistory(); } catch (error) { console.warn('History unavailable', error); }
+  await refresh();
+  setInterval(refresh, 2000);
+});

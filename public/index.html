@@ -160,7 +160,7 @@
   .lock-text b{color:var(--info);}
 
   /* module strip */
-  .module-strip{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:18px;}
+  .module-strip{display:grid;grid-template-columns:repeat(2,1fr);gap:14px;margin-bottom:18px;}
   @media (max-width:860px){ .module-strip{grid-template-columns:1fr 1fr;} }
   .module-card{padding:18px 16px 16px;}
   .module-card .m-eyebrow{font-family:var(--font-mono);font-size:9.5px;color:var(--text-dim);letter-spacing:0.09em;}
@@ -244,12 +244,12 @@
         <div>
           <div class="hero-eyebrow">FACTORY AUTOMATION HARDWARE</div>
           <h1>스마트 실린더 케이스<br><span>SMART CYLINDER CASE</span></h1>
-          <p class="lead">배출 · 가공 실린더, 컨베이어, 비전 검사 모듈을 하나의 케이스에 담은 통합 자동화 유닛입니다. 구매 즉시 전용 시리얼 넘버가 발급되고, 그 넘버로 실시간 모니터링 대시보드에 접속할 수 있습니다.</p>
+          <p class="lead">ADXL345 가속도 센서와 INMP441 디지털 마이크를 이용해 컨베이어와 가공 실린더의 진동·음향 신호를 분석하는 디지털 트윈 모니터링 시스템입니다. 전용 시리얼 넘버로 실시간 AI 상태 대시보드에 접속할 수 있습니다.</p>
           <div class="spec-chips">
-            <div class="spec-chip"><span class="dot"></span>배출 실린더 · 3계통</div>
-            <div class="spec-chip"><span class="dot"></span>가공 실린더 · 압력 자동제어</div>
-            <div class="spec-chip"><span class="dot"></span>컨베이어 정속 이송</div>
-            <div class="spec-chip"><span class="dot"></span>비전 카메라 양/불량 판정</div>
+            <div class="spec-chip"><span class="dot"></span>ADXL345 · 가속도/충격</div>
+            <div class="spec-chip"><span class="dot"></span>INMP441 · 음향/누설음</div>
+            <div class="spec-chip"><span class="dot"></span>컨베이어 · 회전/고조파 분석</div>
+            <div class="spec-chip"><span class="dot"></span>실린더 · 스트로크/충격 분석</div>
           </div>
           <div class="buy-row">
             <div class="price"><span class="amt">290,000원</span> <span class="unit">/ 1 SET</span></div>
@@ -265,8 +265,8 @@
           <span class="bolt tl"></span><span class="bolt tr"></span><span class="bolt bl"></span><span class="bolt br"></span>
           <div class="lp-head">
             <div>
-              <div class="lp-eyebrow">PART 02 · MACHINING PREVIEW</div>
-              <div class="lp-title">가공 실린더 라이브 상태</div>
+              <div class="lp-eyebrow">SENSOR AI · LIVE PREVIEW</div>
+              <div class="lp-title">가공 실린더 센서 상태</div>
             </div>
             <div class="lp-badge">LOCKED</div>
           </div>
@@ -275,9 +275,9 @@
               <div class="lp-fake-gauge">
                 <div class="lp-ring"></div>
                 <div class="lp-metrics">
-                  <div class="lp-mline"><span>가공 위치</span><b>62%</b></div>
-                  <div class="lp-mline"><span>사이클 누적</span><b>128 회</b></div>
-                  <div class="lp-mline"><span>스핀들 온도</span><b>44.2°C</b></div>
+                  <div class="lp-mline"><span>가속도 RMS</span><b>0.054 g</b></div>
+                  <div class="lp-mline"><span>충격 에너지</span><b>0.003 g²·s</b></div>
+                  <div class="lp-mline"><span>음향 RMS</span><b>-37.2 dBFS</b></div>
                 </div>
               </div>
             </div>
@@ -293,27 +293,15 @@
     <div class="module-strip">
       <div class="panel module-card">
         <span class="m-led"></span>
-        <div class="m-eyebrow">PART 01 · DISCHARGE</div>
-        <div class="m-title">배출 실린더</div>
-        <div class="m-desc">양품 · 불량 · 미도착 3계통 자동 분류 배출</div>
+        <div class="m-eyebrow">EQUIPMENT 01 · CONVEYOR</div>
+        <div class="m-title">컨베이어 AI</div>
+        <div class="m-desc">연속 진동의 회전 주파수 · 고조파 · 베어링 이상음 분석</div>
       </div>
       <div class="panel module-card">
         <span class="m-led" style="background:var(--info);box-shadow:0 0 6px var(--info)"></span>
-        <div class="m-eyebrow">PART 02 · MACHINING</div>
-        <div class="m-title">가공 실린더</div>
-        <div class="m-desc">압력 · 온도 실시간 감지 및 이상 알림</div>
-      </div>
-      <div class="panel module-card">
-        <span class="m-led" style="background:var(--warn);box-shadow:0 0 6px var(--warn)"></span>
-        <div class="m-eyebrow">PART 03 · TRANSPORT</div>
-        <div class="m-title">컨베이어</div>
-        <div class="m-desc">정속 이송, 속도 및 누적 이동량 표시</div>
-      </div>
-      <div class="panel module-card">
-        <span class="m-led"></span>
-        <div class="m-eyebrow">PART 04 · VISION</div>
-        <div class="m-title">비전 카메라</div>
-        <div class="m-desc">양품률 자동 산출 및 불량 판정 로그</div>
+        <div class="m-eyebrow">EQUIPMENT 02 · CYLINDER</div>
+        <div class="m-title">가공 실린더 AI</div>
+        <div class="m-desc">왕복 충격 · 스트로크 시간 · 누설음 대역 분석</div>
       </div>
     </div>
   </div>
