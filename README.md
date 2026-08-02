@@ -103,14 +103,23 @@ Smart Cylinder Monitoring System은 ADXL345 가속도 센서와 INMP441 마이�
 
 ~~~text
 ML-cylinder-main/
-├── public/                         # 사용자·관리자 웹 화면 및 스크립트
+├── .github/
+│   └── workflows/
+│       └── deploy-pages.yml        # GitHub Pages 자동 배포 설정
+├── data/                           # 센서 측정 및 분석 데이터
+├── public/
+│   ├── index.html                  # 사용자 제품·시리얼 입력 화면
+│   ├── app.js                      # 사용자 화면 동작 및 API 연결
+│   ├── monitoring.html             # 설비 상태 모니터링 화면
+│   ├── monitor.js                  # 상태 비교·추세·차트 처리
+│   └── admin.html                  # 관리자 화면
 ├── src/
 │   ├── algorithms/                 # KNN, Naive Bayes, 회귀 알고리즘
 │   ├── excel_dataset.py            # Excel 데이터 관리 및 모델 학습
 │   ├── factory_twin.py             # 설비별 센서 시뮬레이션 및 독립 모델
 │   ├── health_assessment.py        # 상태 구간, 건강 점수, 추세 분석
 │   └── vibration_features.py       # FFT 기반 진동 특징 추출
-├── tests/                          # 특징 추출·상태 평가·데이터셋 테스트
+├── tests/                          # 특징 추출·상태 평가·데이터셋 테스트 전용
 ├── adxl345_simulator.py            # 가속도 센서 시뮬레이터
 ├── inmp441_microphone.py           # 마이크 센서 시뮬레이터
 ├── smart_cylinder_ai.py            # AI 분석 실행 파일
