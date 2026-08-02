@@ -27,32 +27,36 @@
   <section class="grid">
     <article class="panel">
       <div class="panel-head"><div><div class="eyebrow">CONTINUOUS ROTATION ANALYSIS</div><h2 id="conveyorTitle">컨베이어 · CV-01</h2><div class="caption">회전 주파수·고조파·베어링 이상음 분석</div></div><span id="conveyorStatus" class="status"><i class="dot"></i>--</span></div>
-      <div class="summary"><div><span>가속도 RMS</span><strong id="cvRms">--</strong></div><div><span>주요 진동 주파수</span><strong id="cvFrequency">--</strong></div><div><span>AI 신뢰도</span><strong id="cvConfidence">--</strong></div></div>
+      <div class="summary"><div><span>진동 상태</span><strong id="cvVibrationState">--</strong></div><div><span>평소 대비</span><strong id="cvChange">--</strong></div><div><span>최근 추세</span><strong id="cvTrend">--</strong></div></div>
       <div class="metrics">
+        <div class="metric"><span>상세 진동값 (RMS)</span><b id="cvRms">--</b></div><div class="metric"><span>주요 진동 주파수</span><b id="cvFrequency">--</b></div>
         <div class="metric"><span>가속도 Peak</span><b id="cvPeak">--</b></div><div class="metric"><span>Crest Factor</span><b id="cvCrest">--</b></div>
         <div class="metric"><span>고조파 에너지 비율</span><b id="cvHarmonic">--</b></div><div class="metric"><span>음향 RMS</span><b id="cvSound">--</b></div>
-        <div class="metric"><span>음향 고주파 비율</span><b id="cvHighBand">--</b></div><div class="metric"><span>추론 모델</span><b id="cvModel">--</b></div>
+        <div class="metric"><span>음향 고주파 비율</span><b id="cvHighBand">--</b></div><div class="metric"><span>AI 신뢰도</span><b id="cvConfidence">--</b></div>
+        <div class="metric"><span>추론 모델</span><b id="cvModel">--</b></div>
       </div>
       <div class="sensor-note">ADXL345 연속 가속도 신호와 INMP441 PCM 신호에서 계산한 값입니다. 모터 전류·온도·속도 센서값은 포함하지 않습니다.</div>
     </article>
 
     <article class="panel">
       <div class="panel-head"><div><div class="eyebrow">RECIPROCATING EVENT ANALYSIS</div><h2 id="cylinderTitle">가공 실린더 · CY-01</h2><div class="caption">왕복 충격·스트로크·누설음 대역 분석</div></div><span id="cylinderStatus" class="status"><i class="dot"></i>--</span></div>
-      <div class="summary"><div><span>상태 Zone</span><strong id="cyZone">--</strong></div><div><span>건강 점수</span><strong id="cyHealth">--</strong></div><div><span>AI 신뢰도</span><strong id="cyConfidence">--</strong></div></div>
+      <div class="summary"><div><span>진동 상태</span><strong id="cyVibrationState">--</strong></div><div><span>평소 대비</span><strong id="cyChange">--</strong></div><div><span>최근 추세</span><strong id="cyTrend">--</strong></div></div>
       <div class="metrics">
-        <div class="metric"><span>가속도 RMS</span><b id="cyRms">--</b></div><div class="metric"><span>가속도 Peak</span><b id="cyPeak">--</b></div>
+        <div class="metric"><span>상태 등급</span><b id="cyZone">--</b></div><div class="metric"><span>건강 점수</span><b id="cyHealth">--</b></div>
+        <div class="metric"><span>상세 진동값 (RMS)</span><b id="cyRms">--</b></div><div class="metric"><span>가속도 Peak</span><b id="cyPeak">--</b></div>
         <div class="metric"><span>Crest Factor</span><b id="cyCrest">--</b></div><div class="metric"><span>충격 에너지</span><b id="cyImpact">--</b></div>
         <div class="metric"><span>검출 스트로크 시간</span><b id="cyStroke">--</b></div><div class="metric"><span>누설음 대역 비율</span><b id="cyLeak">--</b></div>
         <div class="metric"><span>음향 RMS</span><b id="cySound">--</b></div><div class="metric"><span>세션 검출 사이클</span><b id="cyCycles">--</b></div>
-        <div class="metric"><span>예측 잔여 사이클</span><b id="cyRemaining">--</b></div><div class="metric"><span>추론 모델</span><b id="cyModel">--</b></div>
+        <div class="metric"><span>예측 잔여 사이클</span><b id="cyRemaining">--</b></div><div class="metric"><span>AI 신뢰도</span><b id="cyConfidence">--</b></div>
+        <div class="metric"><span>추론 모델</span><b id="cyModel">--</b></div>
       </div>
       <div class="sensor-note">스트로크와 사이클은 센서 이벤트로 검출한 값이며, 잔여 사이클은 실제 수명 보증값이 아닌 AI 추정값입니다. 압력·온도·위치값은 표시하지 않습니다.</div>
     </article>
   </section>
 
   <section class="charts">
-    <article class="chart-panel"><div class="chart-head"><h3>가속도 RMS 추세</h3><span class="legend">컨베이어 · 실린더 / g</span></div><canvas id="rmsChart"></canvas></article>
-    <article class="chart-panel"><div class="chart-head"><h3>음향 RMS 추세</h3><span class="legend">컨베이어 · 실린더 / dBFS</span></div><canvas id="soundChart"></canvas></article>
+    <article class="chart-panel"><div class="chart-head"><h3>진동 강도 변화</h3><span class="legend">상세 측정 단위 / g RMS</span></div><canvas id="rmsChart"></canvas></article>
+    <article class="chart-panel"><div class="chart-head"><h3>소음 크기 변화</h3><span class="legend">상세 측정 단위 / dBFS</span></div><canvas id="soundChart"></canvas></article>
   </section>
   <div class="event"><b id="eventTime">[--:--:--]</b> <span id="eventText">서버 연결을 준비하고 있습니다.</span></div>
 </main>

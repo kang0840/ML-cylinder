@@ -9,6 +9,22 @@ const $ = id => document.getElementById(id);
 const number = (value, digits = 3) => Number(value).toFixed(digits);
 const percent = value => `${(Number(value) * 100).toFixed(1)}%`;
 
+function vibrationInsight(status, current, history) {
+  const labels = { NORMAL: '안정', WARNING: '주의', ERROR: '위험', FAULT: '위험' };
+  const values = history.filter(Number.isFinite);
+  if (!values.length) return { state: labels[status] || status, change: '기준 수집 중', trend: '분석 중' };
+  const baseline = values.reduce((sum, value) => sum + value, 0) / values.length;
+  const difference = baseline ? ((Number(current) - baseline) / baseline) * 100 : 0;
+  const change = Math.abs(difference) < 1 ? '평소와 비슷' : `${Math.abs(difference).toFixed(0)}% ${difference > 0 ? '증가' : '감소'}`;
+  if (values.length < 6) return { state: labels[status] || status, change, trend: '분석 중' };
+  const recent = values.slice(-6);
+  const first = recent.slice(0, 3).reduce((a, b) => a + b, 0) / 3;
+  const last = recent.slice(3).reduce((a, b) => a + b, 0) / 3;
+  const trendRate = first ? ((last - first) / first) * 100 : 0;
+  const trend = Math.abs(trendRate) < 3 ? '변화 없음' : trendRate > 0 ? '증가 중' : '감소 중';
+  return { state: labels[status] || status, change, trend };
+}
+
 async function api(path) {
   const response = await fetch(new URL(path, API_ROOT), { headers: { Accept: 'application/json' } });
   if (!response.ok) throw new Error(`API ${response.status}`);
@@ -22,8 +38,12 @@ function setStatus(element, status, label = status) {
 }
 
 function updateConveyor(data) {
+  const insight = vibrationInsight(data.status, data.acceleration_rms_g, series.conveyor.rms);
   $('conveyorTitle').textContent = `컨베이어 · ${data.conveyor_id}`;
   setStatus($('conveyorStatus'), data.status);
+  $('cvVibrationState').textContent = insight.state;
+  $('cvChange').textContent = insight.change;
+  $('cvTrend').textContent = insight.trend;
   $('cvRms').textContent = `${number(data.acceleration_rms_g)} g`;
   $('cvFrequency').textContent = `${number(data.dominant_vibration_frequency_hz, 2)} Hz`;
   $('cvConfidence').textContent = percent(data.ai.confidence);
@@ -36,8 +56,12 @@ function updateConveyor(data) {
 }
 
 function updateCylinder(data) {
+  const insight = vibrationInsight(data.status, data.acceleration_rms_g, series.cylinder.rms);
   $('cylinderTitle').textContent = `가공 실린더 · ${data.cylinder_id}`;
   setStatus($('cylinderStatus'), data.status, `${data.status} · Zone ${data.zone}`);
+  $('cyVibrationState').textContent = insight.state;
+  $('cyChange').textContent = insight.change;
+  $('cyTrend').textContent = insight.trend;
   $('cyZone').textContent = data.zone;
   $('cyHealth').textContent = `${data.health_score}/100`;
   $('cyConfidence').textContent = percent(data.ai.confidence);
