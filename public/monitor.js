@@ -62,19 +62,11 @@ function updateCylinder(data) {
   $('cyVibrationState').textContent = insight.state;
   $('cyChange').textContent = insight.change;
   $('cyTrend').textContent = insight.trend;
-  $('cyZone').textContent = data.zone;
   $('cyHealth').textContent = `${data.health_score}/100`;
-  $('cyConfidence').textContent = percent(data.ai.confidence);
-  $('cyRms').textContent = `${number(data.acceleration_rms_g)} g`;
-  $('cyPeak').textContent = `${number(data.acceleration_peak_g)} g`;
-  $('cyCrest').textContent = number(data.crest_factor);
-  $('cyImpact').textContent = `${number(data.impact_energy_g2_s, 4)} g²·s`;
   $('cyStroke').textContent = `${number(data.stroke_duration_ms, 1)} ms`;
-  $('cyLeak').textContent = percent(data.leak_band_energy_ratio);
-  $('cySound').textContent = `${number(data.sound_rms_dbfs, 1)} dBFS`;
-  $('cyCycles').textContent = Number(data.detected_cycle_count_session).toLocaleString('ko-KR');
+  const leakRatio = Number(data.leak_band_energy_ratio);
+  $('cyLeak').textContent = leakRatio < 0.12 ? '낮음' : leakRatio < 0.2 ? '주의' : '높음';
   $('cyRemaining').textContent = `약 ${Number(data.estimated_remaining_cycles).toLocaleString('ko-KR')} 회`;
-  $('cyModel').textContent = data.ai.model;
 }
 
 function appendSeries(type, data) {
