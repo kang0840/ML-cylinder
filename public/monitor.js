@@ -44,15 +44,9 @@ function updateConveyor(data) {
   $('cvVibrationState').textContent = insight.state;
   $('cvChange').textContent = insight.change;
   $('cvTrend').textContent = insight.trend;
-  $('cvRms').textContent = `${number(data.acceleration_rms_g)} g`;
   $('cvFrequency').textContent = `${number(data.dominant_vibration_frequency_hz, 2)} Hz`;
-  $('cvConfidence').textContent = percent(data.ai.confidence);
-  $('cvPeak').textContent = `${number(data.acceleration_peak_g)} g`;
-  $('cvCrest').textContent = number(data.crest_factor);
-  $('cvHarmonic').textContent = percent(data.harmonic_energy_ratio);
-  $('cvSound').textContent = `${number(data.sound_rms_dbfs, 1)} dBFS`;
-  $('cvHighBand').textContent = percent(data.acoustic_high_band_ratio);
-  $('cvModel').textContent = data.ai.model;
+  const noiseRatio = Number(data.acoustic_high_band_ratio);
+  $('cvNoiseRisk').textContent = noiseRatio < 0.12 ? '낮음' : noiseRatio < 0.2 ? '주의' : '높음';
 }
 
 function updateCylinder(data) {
