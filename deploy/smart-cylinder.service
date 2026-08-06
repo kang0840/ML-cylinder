@@ -1,0 +1,19 @@
+[Unit]
+Description=Raspberry Pi 5 Smart Cylinder Collector
+After=network-online.target mosquitto.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=pi
+Group=pi
+WorkingDirectory=/opt/smart-cylinder-pi5
+Environment=PYTHONUNBUFFERED=1
+ExecStart=/opt/smart-cylinder-pi5/venv/bin/python /opt/smart-cylinder-pi5/raspberry_pi5_sensor_model.py
+Restart=on-failure
+RestartSec=5
+NoNewPrivileges=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

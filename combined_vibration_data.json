@@ -1,0 +1,28 @@
+{
+  "timestamp": "2026-07-27T12:22:52.193381+00:00",
+  "sampling_rate_hz": 4000.0,
+  "duration_seconds": 2.0,
+  "sample_count": 8000,
+  "calibration_mps2_per_count": 1e-06,
+  "channels": [
+    {
+      "sensor": "Adafruit I2S MEMS Microphone",
+      "format": "I2S PCM 24bit",
+      "latest_raw_pcm": -62565,
+      "rms_pcm": 39298.66796874927
+    },
+    {
+      "sensor": "INMP441 (글루건 처리)",
+      "format": "I2S PCM 24bit",
+      "latest_raw_pcm": 17145,
+      "rms_pcm": 39934.88463420954
+    }
+  ],
+  "fusion": "arithmetic_mean",
+  "features": {
+    "rms_velocity_mm_s": 0.07607007625830935,
+    "peak_velocity_mm_s": 0.19169335283538022,
+    "crest_factor": 2.519957416428132,
+    "iso_zone": "A"
+  }
+}
