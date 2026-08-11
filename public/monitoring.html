@@ -10,6 +10,9 @@
     @media(min-width:1200px){.wrap{max-width:1600px;padding:28px 32px}.grid{grid-template-columns:repeat(2,minmax(0,1fr))}.panel{padding:24px}.charts{grid-template-columns:repeat(2,minmax(0,1fr))}}
     @media(max-width:768px){.wrap{padding:12px}header{align-items:flex-start;flex-direction:column;padding:18px}.header-side{width:100%;justify-content:flex-start}.server{max-width:100%;overflow:hidden;text-overflow:ellipsis}.toolbar{align-items:flex-start;flex-direction:column}.toolbar>div:first-child{display:grid;gap:8px;width:100%}.toolbar label{display:flex;align-items:center;justify-content:space-between}.panel{padding:16px}.panel-head{gap:12px}.panel h2{font-size:18px}.summary{grid-template-columns:1fr 1fr}.charts{gap:12px;margin-top:12px}.chart-panel{padding:14px}canvas{height:170px}}
     @media(max-width:520px){h1{font-size:19px}.logo{width:42px;height:42px}.panel-head{flex-direction:column}.summary,.metrics{grid-template-columns:1fr}.summary strong{font-size:20px}.event{margin-top:12px}.status{align-self:flex-start}}
+    .camera-panel{margin-bottom:18px;padding:20px 24px;display:flex;align-items:center;justify-content:space-between;gap:24px;background:linear-gradient(120deg,rgba(66,199,255,.1),transparent 45%),linear-gradient(145deg,var(--panel2),var(--panel));border:1px solid var(--line);border-radius:14px}
+    .camera-copy{display:flex;align-items:center;gap:16px}.camera-icon{width:48px;height:48px;display:grid;place-items:center;border:1px solid #35556a;border-radius:11px;background:#0b141a;color:var(--blue);font:700 12px var(--mono)}.camera-panel h2{margin:4px 0 5px;font-size:18px}.camera-button{display:inline-flex;align-items:center;justify-content:center;min-width:150px;padding:11px 16px;border:1px solid var(--blue);border-radius:8px;background:rgba(66,199,255,.08);color:var(--blue);font:600 12px var(--mono);text-decoration:none;transition:.2s ease}.camera-button:hover,.camera-button:focus-visible{background:var(--blue);color:#071015;box-shadow:0 0 18px rgba(66,199,255,.25);outline:none}
+    @media(max-width:650px){.camera-panel{align-items:stretch;flex-direction:column}.camera-button{width:100%}}
   </style>
 </head>
 <body>
@@ -23,6 +26,14 @@
     <div><label>컨베이어<select id="conveyorSelect"><option>CV-01</option><option>CV-02</option></select></label><label>가공 실린더<select id="cylinderSelect"><option>CY-01</option><option>CY-02</option></select></label></div>
     <div id="timestamp" class="timestamp">마지막 갱신 --</div>
   </div>
+
+  <section class="camera-panel" aria-labelledby="cameraTitle">
+    <div class="camera-copy">
+      <div class="camera-icon" aria-hidden="true">CAM</div>
+      <div><div class="eyebrow">VISION MONITORING</div><h2 id="cameraTitle">실시간 카메라</h2><div class="caption">라즈베리 파이 카메라 영상과 연결 상태를 확인합니다.</div></div>
+    </div>
+    <a class="camera-button" href="smart-cylinder-camera.html">카메라 화면 열기 →</a>
+  </section>
 
   <section class="grid">
     <article class="panel">
