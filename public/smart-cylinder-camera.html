@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>VISION CAMERA · SMART CYLINDER</title>
+<style>
+:root{--bg:#0a0d10;--panel:#141a20;--panel2:#191f26;--edge:#2b3540;--text:#e7ebef;--muted:#75808c;--run:#3ddc84;--warn:#ffb020;--fault:#ff5c5c;--info:#4fc3f7}
+*{box-sizing:border-box}html,body{height:100%}body{margin:0;background:radial-gradient(circle at 20% 10%,rgba(79,195,247,.07),transparent 45%),var(--bg);color:var(--text);font-family:Consolas,"Noto Sans KR",sans-serif;overflow:hidden}
+.window{height:100%;display:flex;flex-direction:column;border:1px solid var(--edge)}
+.bar,.footer{display:flex;align-items:center;justify-content:space-between;padding:10px 14px;background:linear-gradient(180deg,var(--panel2),var(--panel));border-bottom:1px solid var(--edge);font-size:11px;letter-spacing:.08em}
+.left{display:flex;align-items:center;gap:9px}.dot,.led{width:8px;height:8px;border-radius:50%;background:var(--warn);box-shadow:0 0 7px var(--warn)}
+.chip{padding:3px 9px;border:1px solid rgba(255,176,32,.4);border-radius:20px;color:var(--warn)}
+.viewport{position:relative;flex:1;display:grid;place-items:center;background:#05070a;overflow:hidden}
+.viewport:after{content:"";position:absolute;inset:0;background:repeating-linear-gradient(0deg,rgba(255,255,255,.018) 0 1px,transparent 1px 3px);pointer-events:none;z-index:4}
+.feed{position:absolute;inset:0;width:100%;height:100%;object-fit:contain;opacity:0;transition:opacity .25s;background:#05070a;z-index:2}.feed.visible{opacity:1}
+.state{position:relative;z-index:3;text-align:center;color:var(--muted)}.state.hidden{display:none}.camera{width:72px;height:72px;margin:0 auto 20px;border:1px solid #3a4652;border-radius:50%;display:grid;place-items:center;font-size:30px}.ring{position:absolute;width:88px;height:88px;margin:-8px;border-radius:50%;border:2px solid transparent;border-top-color:var(--info);animation:spin 1s linear infinite}@keyframes spin{to{transform:rotate(360deg)}}
+.message{font-size:14px;color:var(--text);margin-bottom:12px}.sub{font-size:11px;line-height:1.7}.error{display:none;color:var(--fault)}.error.visible{display:block}.retry{margin-top:15px;padding:8px 16px;border:1px solid #3a4652;border-radius:4px;background:var(--panel2);color:var(--text);cursor:pointer}.retry:hover{border-color:var(--info)}
+.footer{border-top:1px solid var(--edge);border-bottom:0;color:var(--muted)}.signal{display:flex;align-items:center;gap:7px}
+</style>
+</head>
+<body>
+<main class="window">
+ <header class="bar"><div class="left"><span class="dot" id="topDot"></span><span>VISION CAMERA · PART 04</span></div><span class="chip" id="status">CONNECTING</span></header>
+ <section class="viewport">
+  <img class="feed" id="feed" alt="Raspberry Pi 카메라 실시간 영상">
+  <div class="state" id="state">
+   <div class="camera"><span class="ring"></span>📷</div>
+   <div class="message">카메라 연결 중…</div>
+   <div class="sub">라즈베리 파이 카메라 신호를 기다리고 있습니다.</div>
+   <div class="error" id="error">카메라 영상을 불러오지 못했습니다.<br>Pi와 PC의 네트워크를 확인해 주세요.<br><button class="retry" id="retry" type="button">다시 연결</button></div>
+  </div>
+ </section>
+ <footer class="footer"><span class="signal"><span class="led" id="led"></span><span id="signal">SIGNAL WAIT</span></span><span id="clock">--:--:--</span></footer>
+</main>
+<script>
+const CAMERA_URL='/stream';
+const feed=document.getElementById('feed'),state=document.getElementById('state'),errorBox=document.getElementById('error'),statusEl=document.getElementById('status'),led=document.getElementById('led'),signal=document.getElementById('signal'),topDot=document.getElementById('topDot');let timer;
+function paint(mode){const color=mode==='live'?'var(--run)':mode==='error'?'var(--fault)':'var(--warn)';statusEl.textContent=mode==='live'?'LIVE':mode==='error'?'OFFLINE':'CONNECTING';statusEl.style.color=color;statusEl.style.borderColor=color;led.style.background=topDot.style.background=color;led.style.boxShadow=topDot.style.boxShadow='0 0 7px '+color;signal.textContent=mode==='live'?'SIGNAL LIVE':mode==='error'?'NO SIGNAL':'SIGNAL WAIT'}
+function failed(){clearTimeout(timer);feed.classList.remove('visible');state.classList.remove('hidden');errorBox.classList.add('visible');paint('error')}
+function connect(){clearTimeout(timer);feed.classList.remove('visible');state.classList.remove('hidden');errorBox.classList.remove('visible');paint('wait');feed.src=CAMERA_URL+'?t='+Date.now();timer=setTimeout(failed,8000)}
+feed.onload=()=>{clearTimeout(timer);feed.classList.add('visible');state.classList.add('hidden');paint('live')};feed.onerror=failed;document.getElementById('retry').onclick=connect;
+setInterval(()=>document.getElementById('clock').textContent=new Date().toLocaleTimeString('ko-KR',{hour12:false}),1000);connect();
+</script>
+</body>
+</html>
