@@ -1,0 +1,16 @@
+[Unit]
+Description=Smart Cylinder Real Data Web
+After=network-online.target smart-cylinder.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=mother
+WorkingDirectory=/opt/smart-cylinder-pi5
+Environment=SENSOR_DATABASE_PATH=/opt/smart-cylinder-pi5/data/smart_cylinder.db
+ExecStart=/opt/smart-cylinder-pi5/venv/bin/python /opt/smart-cylinder-pi5/server.py --host 0.0.0.0 --port 8000
+Restart=always
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target

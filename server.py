@@ -8,6 +8,7 @@ import os
 import random
 import re
 import secrets
+import sqlite3
 import threading
 import time
 
@@ -198,6 +199,47 @@ initialize_admin()
 
 factory_twin = FactoryDigitalTwin()
 
+
+def real_cylinder_rows(limit: int = 120) -> list[dict]:
+    """Read real Pi measurements locally, or their Supabase mirror on Render."""
+    database_path = Path(os.environ.get(
+        "SENSOR_DATABASE_PATH", "/opt/smart-cylinder-pi5/data/smart_cylinder.db"
+    ))
+    if database_path.exists():
+        with sqlite3.connect(database_path) as connection:
+            connection.row_factory = sqlite3.Row
+            rows = connection.execute(
+                """
+                SELECT m.measured_at,m.sequence,m.cylinder_state,
+                       vf.rms AS vibration_rms,sf.rms AS sound_rms,
+                       c.prediction,c.confidence,c.health_score,
+                       c.controlling_role,c.fusion_version
+                FROM combined_results AS c
+                JOIN measurements AS m
+                  ON m.measurement_id=c.vibration_measurement_id
+                JOIN feature_data AS vf
+                  ON vf.measurement_id=c.vibration_measurement_id
+                JOIN feature_data AS sf
+                  ON sf.measurement_id=c.sound_measurement_id
+                ORDER BY c.id DESC LIMIT ?
+                """,
+                (limit,),
+            ).fetchall()
+        return [dict(row) for row in reversed(rows)]
+
+    url = os.environ.get("SUPABASE_URL", "").strip()
+    key = os.environ.get("SUPABASE_KEY", "").strip()
+    table = os.environ.get("SUPABASE_TABLE", "smart_cylinder_analysis").strip()
+    if not (url and key):
+        return []
+    from supabase import create_client
+    response = (
+        create_client(url, key).table(table)
+        .select("measured_at,cylinder_state,vibration_rms,sound_rms,prediction,confidence,health_score,model_version")
+        .order("measured_at", desc=True).limit(limit).execute()
+    )
+    return list(reversed(response.data or []))
+
 SERIAL_PATTERN = re.compile(r"^SCC-[A-Z0-9]{4}-[A-Z0-9]{4}$")
 
 
@@ -300,6 +342,30 @@ def api_factory_history():
     return jsonify({
         "type": equipment_type or "all",
         "history": factory_twin.history_items(equipment_type, limit),
+    })
+
+
+@app.route("/api/real-cylinder")
+def api_real_cylinder():
+    try:
+        limit = max(1, min(300, int(request.args.get("limit", "120"))))
+        rows = real_cylinder_rows(limit)
+    except (ValueError, sqlite3.Error) as exc:
+        return jsonify({"error": "real_data_unavailable", "message": str(exc)}), 503
+    position = 0
+    for row in rows:
+        state = str(row.get("cylinder_state", "idle"))
+        if state == "forward":
+            position += 1
+        elif state == "backward":
+            position -= 1
+        row["direction_value"] = 1 if state == "forward" else -1 if state == "backward" else 0
+        row["position_index"] = position
+    return jsonify({
+        "source": "real_sensor_database",
+        "count": len(rows),
+        "latest": rows[-1] if rows else None,
+        "history": rows,
     })
 
 
