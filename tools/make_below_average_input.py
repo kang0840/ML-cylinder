@@ -1,4 +1,4 @@
-"""Create a three-model JSON input with feature values below dataset averages."""
+"""데이터 평균보다 낮은 특징값으로 3단계 모델용 JSON 입력을 생성한다."""
 
 from __future__ import annotations
 

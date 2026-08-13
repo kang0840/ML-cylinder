@@ -85,4 +85,4 @@ check = load_workbook(OUTPUT, read_only=True, data_only=True)
 assert check["1초 입력데이터"].max_row == count + 1
 assert check["1초 입력데이터"].max_column == 23
 print(OUTPUT.resolve())
-print(f"one_second_rows={count}")
+print(f"1초 데이터 행 수={count}")

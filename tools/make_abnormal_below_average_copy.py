@@ -1,4 +1,4 @@
-"""Copy the one-second Excel input and force every feature below its column mean."""
+"""1초 Excel 입력을 복사하고 모든 특징을 해당 열 평균보다 낮게 변환한다."""
 
 from __future__ import annotations
 
@@ -53,4 +53,4 @@ for column in range(1, check.max_column):
     assert max(transformed) < original_average
 
 print(OUTPUT.resolve())
-print(f"rows={check.max_row - 1}")
+print(f"1초 데이터 행 수={check.max_row - 1}")

@@ -61,6 +61,13 @@ STATUS_SEVERITY = {
     "internal_wear": 3,
     "unknown": 4,
 }
+STATUS_LABELS = {
+    "normal": "정상",
+    "pressure_drop": "압력 저하",
+    "seal_leak": "실링 누설",
+    "internal_wear": "내부 마모",
+    "unknown": "판정 불가",
+}
 
 
 class ThreeModelPredictor:
@@ -152,8 +159,9 @@ class ThreeModelPredictor:
         versions = {name: self.packages[name]["model_version"] for name in self.packages}
         for index in range(len(source)):
             sheet.append([
-                source.iloc[index]["초 번호"], vp[index], float(vc[index]), sp[index], float(sc[index]),
-                round(float(remaining[index]), 2), statuses[index], versions["vibration"],
+                source.iloc[index]["초 번호"], STATUS_LABELS.get(vp[index], vp[index]), float(vc[index]),
+                STATUS_LABELS.get(sp[index], sp[index]), float(sc[index]),
+                round(float(remaining[index]), 2), STATUS_LABELS.get(statuses[index], statuses[index]), versions["vibration"],
                 versions["sound"], versions["life"],
             ])
         for cell in sheet[1]:
@@ -173,9 +181,9 @@ class ThreeModelPredictor:
             cell.number_format = "0.0"
         end = sheet.max_row
         sheet.conditional_formatting.add(
-            f"G2:G{end}", FormulaRule(formula=['G2="normal"'], fill=PatternFill("solid", fgColor="C6EFCE")))
+            f"G2:G{end}", FormulaRule(formula=['G2="정상"'], fill=PatternFill("solid", fgColor="C6EFCE")))
         sheet.conditional_formatting.add(
-            f"G2:G{end}", FormulaRule(formula=['G2<>"normal"'], fill=PatternFill("solid", fgColor="FFC7CE")))
+            f"G2:G{end}", FormulaRule(formula=['G2<>"정상"'], fill=PatternFill("solid", fgColor="FFC7CE")))
         workbook.save(path)
         last = len(source) - 1
         representative = {
@@ -198,8 +206,7 @@ class ThreeModelPredictor:
 
 
 def print_result(result: dict[str, Any], input_name: str, total_rows: int | None = None) -> None:
-    labels = {"normal": "정상", "pressure_drop": "압력 저하", "seal_leak": "점검 필요",
-              "internal_wear": "위험", "unknown": "판정 불가"}
+    labels = {**STATUS_LABELS, "seal_leak": "점검 필요", "internal_wear": "위험"}
     print("\n" + "=" * 54)
     print("          스마트 실린더 AI 상태 진단")
     print("=" * 54)
