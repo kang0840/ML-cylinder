@@ -238,6 +238,28 @@ PyCaret 분류기가 출력하는 0.9~1.0 확률을 그대로 전달하면 학�
 실제 판정을 사용합니다. 사용자가 명시적으로 승인하기 전에는 이 후보를 최종 운영
 모델로 확정하거나 Raspberry Pi 서비스에 적용하지 않습니다.
 
+### Raspberry Pi 모델 추론 전용 설치
+
+Pi에는 학습·비교 라이브러리 전체를 설치하지 않고 모델 추론 전용 가상환경만
+설치합니다. 프로젝트와 선택된 모델 3개를 `/opt/smart-cylinder-pi5`에 복사한 뒤
+다음을 실행합니다.
+
+```bash
+cd /opt/smart-cylinder-pi5
+sudo bash deploy/install-model-runtime.sh
+```
+
+설치되는 주요 패키지는 NumPy, SciPy, Pandas, scikit-learn, imbalanced-learn,
+joblib, category-encoders, openpyxl과 저장된 파이프라인을 불러오기 위한 PyCaret
+모듈입니다.
+PyCaret은 `--no-deps`로 설치하므로 LightGBM, XGBoost, CatBoost, Jupyter 및 모델
+비교용 추가 패키지는 설치하지 않습니다. 기존 수집·웹 서비스의 `venv`와 분리된
+`venv-model`을 사용합니다.
+
+```bash
+./venv-model/bin/python run_three_pycaret_models.py --input 입력파일.xlsx
+```
+
 ## SQLite 테이블
 
 - `measurements`: 측정 메타데이터와 sequence

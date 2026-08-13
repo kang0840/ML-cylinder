@@ -1,0 +1,10 @@
+# Raspberry Pi 5 모델 추론 전용(Python 3.11)
+# 학습·비교용 패키지는 설치하지 않는다.
+numpy==1.26.4
+scipy==1.11.4
+pandas==2.1.4
+joblib==1.3.2
+scikit-learn==1.4.2
+imbalanced-learn==0.12.4
+category-encoders==2.7.0
+openpyxl>=3.1,<4

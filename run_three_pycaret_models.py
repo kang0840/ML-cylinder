@@ -17,8 +17,12 @@ from typing import Any
 # 실행해도 프로젝트의 Python 3.11 가상환경으로 자동 전환한다.
 ROOT = Path(__file__).resolve().parent
 if sys.version_info >= (3, 12):
-    venv_python = ROOT / ".venv-pycaret" / "Scripts" / "python.exe"
-    if venv_python.exists() and Path(sys.executable).resolve() != venv_python.resolve():
+    candidates = [
+        ROOT / ".venv-pycaret" / "Scripts" / "python.exe",  # Windows 개발 환경
+        ROOT / "venv-model" / "bin" / "python",             # Raspberry Pi 모델 환경
+    ]
+    venv_python = next((path for path in candidates if path.exists()), None)
+    if venv_python is not None and Path(sys.executable).resolve() != venv_python.resolve():
         os.execv(str(venv_python), [str(venv_python), str(Path(__file__).resolve()), *sys.argv[1:]])
     raise RuntimeError(
         "PyCaret은 Python 3.12를 지원하지 않습니다. "
