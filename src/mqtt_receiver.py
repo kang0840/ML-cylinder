@@ -10,6 +10,7 @@ import paho.mqtt.client as mqtt
 
 LOGGER = logging.getLogger(__name__)
 SENSOR_TOPICS = ("smartCylinder/+/sph0645/raw", "smartCylinder/+/inmp441/raw")
+PICO_DUAL_TOPIC = "+/dual_i2s_mic/+"
 STATUS_TOPIC = "smartCylinder/+/status"
 
 
@@ -28,7 +29,7 @@ class MQTTReceiver:
         if reason_code != 0:
             LOGGER.error("MQTT 연결 실패: %s", reason_code)
             return
-        for topic in (*SENSOR_TOPICS, STATUS_TOPIC):
+        for topic in (*SENSOR_TOPICS, PICO_DUAL_TOPIC, STATUS_TOPIC):
             client.subscribe(topic, qos=1)
         LOGGER.info("MQTT 연결 및 토픽 구독 완료: %s:%s", self.host, self.port)
 

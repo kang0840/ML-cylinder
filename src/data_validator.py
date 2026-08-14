@@ -3,10 +3,12 @@
 from __future__ import annotations
 
 import math
+import time
 from dataclasses import dataclass
 from typing import Any
 
 VALID_SENSORS = {"sph0645", "inmp441"}
+SENSOR_ROLES = {"sph0645": "acoustic_vibration", "inmp441": "sound"}
 VALID_STATES = {"forward", "backward", "idle"}
 REQUIRED_FIELDS = {"device_id", "sensor_type", "sample_rate", "cylinder_state", "sequence", "timestamp", "samples"}
 MAX_SAMPLES = 100_000
@@ -22,6 +24,8 @@ class SensorPacket:
     timestamp: float
     samples: tuple[float, ...]
     health_score_target: float | None = None
+    boot_id: str = "legacy"
+    condition_target: str | None = None
 
 
 def validate_sensor_payload(payload: Any) -> SensorPacket:
@@ -39,6 +43,7 @@ def validate_sensor_payload(payload: Any) -> SensorPacket:
     timestamp = payload["timestamp"]
     samples = payload["samples"]
     target = payload.get("health_score_target")
+    condition_target = payload.get("condition_target")
     if not isinstance(device_id, str) or not device_id.strip() or len(device_id) > 64:
         raise ValueError("device_id는 1~64자의 문자열이어야 합니다.")
     if sensor not in VALID_SENSORS:
@@ -62,7 +67,34 @@ def validate_sensor_payload(payload: Any) -> SensorPacket:
         or not 0 <= target <= 100
     ):
         raise ValueError("health_score_target은 0~100 사이의 숫자여야 합니다.")
+    boot_id = payload.get("boot_id", "legacy")
+    if not isinstance(boot_id, str) or not boot_id.strip() or len(boot_id) > 64:
+        raise ValueError("boot_id must be a non-empty string of at most 64 characters")
+    valid_conditions = {"normal", "pressure_drop", "seal_leak", "internal_wear"}
+    if condition_target is not None and condition_target not in valid_conditions:
+        raise ValueError(f"condition_target must be one of {sorted(valid_conditions)}")
     return SensorPacket(
         device_id.strip(), sensor, sample_rate, state, sequence, float(timestamp),
         tuple(float(v) for v in samples), None if target is None else float(target),
+        boot_id.strip(), condition_target,
+    )
+
+
+def expand_dual_microphone_payload(payload: Any) -> tuple[dict[str, Any], ...]:
+    """Convert a dual-channel Pico W packet into normal sensor packets."""
+    if not isinstance(payload, dict) or payload.get("sensor_id") != "dual_i2s_mic":
+        return (payload,)
+    required = {"device_id", "sequence", "sample_rate_hz", "left_samples", "right_samples"}
+    missing = required - payload.keys()
+    if missing:
+        raise ValueError(f"dual microphone payload missing: {', '.join(sorted(missing))}")
+    common = {
+        "device_id": payload["device_id"], "sample_rate": payload["sample_rate_hz"],
+        "cylinder_state": payload.get("cylinder_state", "idle"),
+        "sequence": payload["sequence"], "timestamp": payload.get("timestamp", time.time()),
+        "boot_id": payload.get("boot_id", "legacy"),
+    }
+    return (
+        {**common, "sensor_type": "sph0645", "samples": payload["left_samples"]},
+        {**common, "sensor_type": "inmp441", "samples": payload["right_samples"]},
     )

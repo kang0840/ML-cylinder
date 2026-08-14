@@ -1,0 +1,7 @@
+version: acoustic-bands-v1
+bands:
+  low_motion_band: [5, 80]
+  fundamental_motion_band: [80, 400]
+  harmonic_band: [400, 1200]
+  impact_band: [1200, 4000]
+  high_frequency_fault_band: [4000, 10000]

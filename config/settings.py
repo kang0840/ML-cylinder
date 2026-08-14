@@ -25,6 +25,7 @@ class Settings:
     mqtt_username: str | None
     mqtt_password: str | None
     mqtt_keepalive: int
+    ingest_database_path: Path
     database_path: Path
     model_path: Path
     log_path: Path
@@ -34,6 +35,7 @@ class Settings:
     use_hann_window: bool
     upload_retry_seconds: int
     auto_train_batch_size: int
+    inference_excel_path: Path
 
     @classmethod
     def load(cls) -> "Settings":
@@ -44,6 +46,7 @@ class Settings:
             mqtt_username=os.getenv("MQTT_USERNAME") or None,
             mqtt_password=os.getenv("MQTT_PASSWORD") or None,
             mqtt_keepalive=int(os.getenv("MQTT_KEEPALIVE", "60")),
+            ingest_database_path=ROOT / os.getenv("INGEST_DATABASE_PATH", "data/raw_ingest.db"),
             database_path=ROOT / os.getenv("DATABASE_PATH", "data/smart_cylinder.db"),
             model_path=ROOT / os.getenv("MODEL_PATH", "models/cylinder_model.pkl"),
             log_path=ROOT / os.getenv("LOG_PATH", "logs/smart_cylinder.log"),
@@ -52,7 +55,8 @@ class Settings:
             supabase_table=os.getenv("SUPABASE_TABLE", "smart_cylinder_analysis"),
             use_hann_window=_bool("FFT_USE_HANN_WINDOW", True),
             upload_retry_seconds=int(os.getenv("UPLOAD_RETRY_SECONDS", "30")),
-            auto_train_batch_size=int(os.getenv("AUTO_TRAIN_BATCH_SIZE", "50")),
+            auto_train_batch_size=int(os.getenv("AUTO_TRAIN_BATCH_SIZE", "10")),
+            inference_excel_path=ROOT / os.getenv("INFERENCE_EXCEL_PATH", "data/export/inference_results.xlsx"),
         )
         settings.validate()
         return settings
@@ -70,5 +74,5 @@ class Settings:
             raise ValueError("SUPABASE_URL과 SUPABASE_KEY는 함께 설정해야 합니다.")
 
     def create_directories(self) -> None:
-        for path in (self.database_path.parent, self.model_path.parent, self.log_path.parent, ROOT / "data/export", ROOT / "data/backup"):
+        for path in (self.ingest_database_path.parent, self.database_path.parent, self.model_path.parent, self.log_path.parent, self.inference_excel_path.parent, ROOT / "data/export", ROOT / "data/backup"):
             path.mkdir(parents=True, exist_ok=True)

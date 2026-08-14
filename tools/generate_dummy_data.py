@@ -32,7 +32,10 @@ def main() -> None:
     parser.add_argument("--sample-rate", type=int, default=1600)
     parser.add_argument("--samples", type=int, default=1600)
     parser.add_argument("--count", type=int, default=5)
+    parser.add_argument("--health-score-target", type=float, help="0~100 정답 건강 점수")
     args = parser.parse_args()
+    if args.health_score_target is not None and not 0 <= args.health_score_target <= 100:
+        parser.error("--health-score-target은 0~100이어야 합니다.")
     settings, rng = Settings.load(), np.random.default_rng()
     client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2)
     if settings.mqtt_username:
@@ -43,6 +46,8 @@ def main() -> None:
         for sequence in range(1, args.count + 1):
             for sensor in ("sph0645", "inmp441"):
                 payload = {"device_id": args.device_id, "sensor_type": sensor, "sample_rate": args.sample_rate, "cylinder_state": "forward", "sequence": sequence, "timestamp": time.time(), "samples": generate_samples(args.condition, sensor, args.sample_rate, args.samples, rng)}
+                if args.health_score_target is not None:
+                    payload["health_score_target"] = args.health_score_target
                 topic = f"smartCylinder/{args.device_id}/{sensor}/raw"
                 client.publish(topic, json.dumps(payload), qos=1).wait_for_publish()
                 print(f"발행 완료: {topic} sequence={sequence}")

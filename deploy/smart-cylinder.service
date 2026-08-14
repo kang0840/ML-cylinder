@@ -5,11 +5,12 @@ Wants=network-online.target
 
 [Service]
 Type=simple
-User=pi
-Group=pi
+User=mother
+Group=mother
 WorkingDirectory=/opt/smart-cylinder-pi5
 Environment=PYTHONUNBUFFERED=1
-ExecStart=/opt/smart-cylinder-pi5/venv/bin/python /opt/smart-cylinder-pi5/raspberry_pi5_sensor_model.py
+EnvironmentFile=/opt/smart-cylinder-pi5/.env
+ExecStart=/opt/smart-cylinder-pi5/venv/bin/python /opt/smart-cylinder-pi5/main.py
 Restart=on-failure
 RestartSec=5
 NoNewPrivileges=true

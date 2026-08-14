@@ -142,6 +142,12 @@ def main() -> None:
     if not args.excel.exists():
         create_excel_dataset(args.excel, demo_x, demo_y)
         print(f"Created temporary Excel training data: {args.excel}")
+    try:
+        # Stop before inference, output creation, or measurement logging when the
+        # workbook does not contain enough trusted labelled data.
+        model, training_rows = train_model_from_excel(args.excel)
+    except ValueError as error:
+        parser.exit(1, f"모델 실행 중단: {error}\n")
     baseline["zone_d_rms_threshold"] = load_zone_d_rms_threshold(args.excel)
     rng = np.random.default_rng()
     history = load_rms_history(args.excel)
@@ -152,7 +158,6 @@ def main() -> None:
     completed = 0
     try:
         while args.count == 0 or completed < args.count:
-            model, training_rows = train_model_from_excel(args.excel)
             result = analyze_once(args.fs, args.duration, hours, model, baseline, history, rng)
             result["ai_prediction"]["training_source"] = str(args.excel)
             result["ai_prediction"]["training_rows"] = training_rows

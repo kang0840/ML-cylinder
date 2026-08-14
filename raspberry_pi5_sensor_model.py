@@ -19,6 +19,7 @@ from src.auto_trainer import AutoTrainer
 from src.database import Database
 from src.logger_config import configure_logging
 from src.ml_predictor import MLPredictor
+from src.inference_excel_store import InferenceExcelStore
 from src.mqtt_receiver import MQTTReceiver
 from src.pipeline import SensorPipeline
 from src.supabase_uploader import SupabaseUploader
@@ -45,7 +46,7 @@ class SensorModelRunner:
         )
         self.pipeline = SensorPipeline(
             self.database, predictor, self.uploader, settings.use_hann_window,
-            self.trainer.notify,
+            self.trainer.notify, InferenceExcelStore(settings.inference_excel_path),
         )
         self.payloads: queue.Queue[dict[str, Any] | object] = queue.Queue(
             maxsize=queue_size

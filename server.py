@@ -203,7 +203,7 @@ factory_twin = FactoryDigitalTwin()
 def real_cylinder_rows(limit: int = 120) -> list[dict]:
     """Read real Pi measurements locally, or their Supabase mirror on Render."""
     database_path = Path(os.environ.get(
-        "SENSOR_DATABASE_PATH", "/opt/smart-cylinder-pi5/data/smart_cylinder.db"
+        "SENSOR_DATABASE_PATH", str(ROOT / "data" / "smart_cylinder.db")
     ))
     if database_path.exists():
         with sqlite3.connect(database_path) as connection:
@@ -213,6 +213,10 @@ def real_cylinder_rows(limit: int = 120) -> list[dict]:
                 SELECT m.measured_at,m.sequence,m.cylinder_state,
                        vf.rms AS vibration_rms,sf.rms AS sound_rms,
                        c.prediction,c.confidence,c.health_score,
+                       c.remaining_life_percent,c.remaining_hours,c.remaining_cycles,
+                       c.rul_status,c.rul_model_version,
+                       vr.prediction AS vibration_prediction,vr.confidence AS vibration_confidence,
+                       sr.prediction AS sound_prediction,sr.confidence AS sound_confidence,
                        c.controlling_role,c.fusion_version
                 FROM combined_results AS c
                 JOIN measurements AS m
@@ -221,6 +225,8 @@ def real_cylinder_rows(limit: int = 120) -> list[dict]:
                   ON vf.measurement_id=c.vibration_measurement_id
                 JOIN feature_data AS sf
                   ON sf.measurement_id=c.sound_measurement_id
+                JOIN ml_results AS vr ON vr.measurement_id=c.vibration_measurement_id
+                JOIN ml_results AS sr ON sr.measurement_id=c.sound_measurement_id
                 ORDER BY c.id DESC LIMIT ?
                 """,
                 (limit,),
