@@ -31,11 +31,11 @@ class SupabaseUploader:
             self.database.enqueue_upload(measurement_id, payload, str(exc))
             return False
 
-    def retry_pending(self) -> tuple[int, int]:
+    def retry_pending(self, limit: int = 1) -> tuple[int, int]:
         if self.client is None:
             return 0, 0
         success = failed = 0
-        for row in self.database.queued_uploads():
+        for row in self.database.queued_uploads(limit=limit):
             try:
                 self.client.table(self.table).upsert(json.loads(row["payload"]), on_conflict="measurement_id").execute()
                 self.database.remove_upload(row["id"])

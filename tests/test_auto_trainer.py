@@ -17,7 +17,10 @@ def test_trains_existing_sensor_regressor_and_swaps_model(tmp_path):
             (1.0 + sequence, 2.0, 3.0, 4.0), 90.0 - sequence,
         )
         features = extract_features(packet.samples, packet.sample_rate)
-        database.save_measurement(packet, features, predictor.predict(features))
+        database.save_measurement(
+            packet, features,
+            predictor.predict(features, packet.samples, packet.sensor_type),
+        )
 
     trainer = AutoTrainer(database, predictor, model_path, batch_size=2)
     trainer.start()

@@ -9,8 +9,10 @@ from typing import Any
 
 import joblib
 import numpy as np
+import pandas as pd
 
 from .feature_extractor import FEATURE_NAMES
+from .data_validator import SENSOR_ROLES
 
 LOGGER = logging.getLogger(__name__)
 PREDICTIONS = {"normal", "pressure_drop", "seal_leak", "internal_wear", "unknown"}
@@ -45,7 +47,13 @@ class MLPredictor:
             self.model_type = model_type
 
     def predict(self, features: dict[str, float], samples=None, sensor_type: str | None = None) -> dict[str, float | str]:
-        vector = np.asarray([[features[name] for name in self.feature_names]], dtype=float)
+        if sensor_type not in SENSOR_ROLES:
+            raise ValueError(f"sensor_type must be one of {sorted(SENSOR_ROLES)}")
+        sensor_role = SENSOR_ROLES[sensor_type]
+        vector = pd.DataFrame(
+            [{name: features[name] for name in self.feature_names}],
+            columns=self.feature_names,
+        )
         with self._lock:
             model, model_version, model_type = self.model, self.model_version, self.model_type
         if model is not None and model_type == "sensor_polynomial_regressor":
@@ -72,6 +80,7 @@ class MLPredictor:
             health = max(0.0, min(100.0, 100.0 * confidence if prediction == "normal" else 100.0 * (1.0 - confidence)))
         else:
             crest, rms = features["crest_factor"], features["rms"]
+            model_version = f"fallback-{sensor_role}-threshold-v1"
             if not np.isfinite(rms):
                 prediction, confidence, health = "unknown", 0.0, 0.0
             elif crest >= 6.0:
@@ -80,4 +89,10 @@ class MLPredictor:
                 prediction, confidence, health = "seal_leak", 0.60, 60.0
             else:
                 prediction, confidence, health = "normal", 0.55, 90.0
-        return {"prediction": prediction, "confidence": round(confidence, 6), "health_score": round(health, 2), "model_version": model_version}
+        return {
+            "prediction": prediction,
+            "confidence": round(confidence, 6),
+            "health_score": round(health, 2),
+            "model_version": model_version,
+            "sensor_role": sensor_role,
+        }

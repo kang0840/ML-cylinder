@@ -17,6 +17,7 @@ EXCEL_FEATURES = (
 MODEL_FEATURES = EXCEL_FEATURES[:-1]
 HEADERS = ("timestamp", *EXCEL_FEATURES, "label", "label_source")
 SHEET_NAME = "TrainingData"
+MIN_TRAINING_ROWS = 10
 
 
 def create_excel_dataset(path: Path, x: np.ndarray, y: np.ndarray) -> None:
@@ -123,8 +124,14 @@ def train_model_from_excel(path: Path, seed: int = 42) -> tuple[Classifier, int]
             raise ValueError("invalid trusted training data")
         x.append(values)
         y.append(label)
-    if len(x) < 8 or len(set(y)) < 2:
-        raise ValueError("Excel needs at least 8 trusted labelled rows from two or more zones")
+    if len(x) < MIN_TRAINING_ROWS:
+        raise ValueError(
+            f"모델을 실행하려면 신뢰할 수 있는 라벨 데이터가 최소 "
+            f"{MIN_TRAINING_ROWS}개 필요합니다 "
+            f"(현재 {len(x)}개, {MIN_TRAINING_ROWS - len(x)}개 부족)."
+        )
+    if len(set(y)) < 2:
+        raise ValueError("모델을 실행하려면 두 개 이상의 구역 라벨이 필요합니다.")
     x_array, y_array = np.asarray(x), np.asarray(y)
     model = train_cylinder_condition_model(x_array, y_array, seed=seed, oob_score=True)
     return model, len(y_array)
