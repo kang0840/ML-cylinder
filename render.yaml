@@ -9,6 +9,12 @@ services:
     envVars:
       - key: DATABASE_URL
         sync: false
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_KEY
+        sync: false
+      - key: SUPABASE_TABLE
+        value: smart_cylinder_analysis
       - key: ALLOWED_ORIGIN
         value: https://kang0840.github.io
       - key: ADMIN_PASSWORD
