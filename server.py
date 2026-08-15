@@ -358,15 +358,9 @@ def api_real_cylinder():
         rows = real_cylinder_rows(limit)
     except (ValueError, sqlite3.Error) as exc:
         return jsonify({"error": "real_data_unavailable", "message": str(exc)}), 503
-    position = 0
     for row in rows:
         state = str(row.get("cylinder_state", "idle"))
-        if state == "forward":
-            position += 1
-        elif state == "backward":
-            position -= 1
         row["direction_value"] = 1 if state == "forward" else -1 if state == "backward" else 0
-        row["position_index"] = position
     return jsonify({
         "source": "real_sensor_database",
         "count": len(rows),
