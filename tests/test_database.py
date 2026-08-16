@@ -18,6 +18,18 @@ def test_save_is_atomic_and_duplicate_safe(tmp_path):
         assert con.execute("select count(*) from raw_sensor_data").fetchone()[0] == 4
     db.close()
 
+def test_ground_truth_and_prediction_are_stored_separately(tmp_path):
+    db=Database(tmp_path/"labels.db")
+    packet=SensorPacket("pico01","inmp441",100,"extending",1,1785830000,(1.,2.,3.,4.),None,"boot",None,"seal_leak_01","session_01",0.5,0.0,"seal_leak","controlled_experiment")
+    features=extract_features(packet.samples,packet.sample_rate)
+    result={"prediction":"normal","confidence":0.9,"health_score":80,"model_version":"model-v1"}
+    db.save_measurement(packet,features,result)
+    with sqlite3.connect(tmp_path/"labels.db") as con:
+        truth=con.execute("select ground_truth from measurements").fetchone()[0]
+        prediction=con.execute("select prediction from ml_results").fetchone()[0]
+        assert (truth,prediction)==("seal_leak","normal")
+    db.close()
+
 
 def test_ingest_queue_is_durable_and_claims_latest_first(tmp_path):
     path = tmp_path / "ingest.db"

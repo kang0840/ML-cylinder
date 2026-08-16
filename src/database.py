@@ -22,6 +22,8 @@ CREATE TABLE IF NOT EXISTS measurements (
  sensor_type TEXT NOT NULL, measured_at TEXT NOT NULL, sample_rate INTEGER NOT NULL,
  cylinder_state TEXT NOT NULL, sequence INTEGER NOT NULL, sample_count INTEGER NOT NULL,
  health_score_target REAL, condition_target TEXT,
+ experiment_id TEXT, session_id TEXT, pressure_mpa REAL, load_kg REAL,
+ ground_truth TEXT, ground_truth_source TEXT,
  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
  UNIQUE(device_id, boot_id, sensor_type, sequence)
 );
@@ -110,6 +112,13 @@ class Database:
             self._connection.execute(
                 "ALTER TABLE measurements ADD COLUMN boot_id TEXT NOT NULL DEFAULT 'legacy'"
             )
+        for name, sql_type in (
+            ("experiment_id","TEXT"),("session_id","TEXT"),
+            ("pressure_mpa","REAL"),("load_kg","REAL"),
+            ("ground_truth","TEXT"),("ground_truth_source","TEXT"),
+        ):
+            if name not in measurement_columns:
+                self._connection.execute(f"ALTER TABLE measurements ADD COLUMN {name} {sql_type}")
         self._connection.commit()
         table_sql = self._connection.execute(
             "SELECT sql FROM sqlite_master WHERE type='table' AND name='measurements'"
@@ -198,17 +207,22 @@ class Database:
                   sample_count INTEGER NOT NULL,
                   health_score_target REAL,
                   condition_target TEXT,
+                  experiment_id TEXT, session_id TEXT,
+                  pressure_mpa REAL, load_kg REAL,
+                  ground_truth TEXT, ground_truth_source TEXT,
                   created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
                   UNIQUE(device_id, boot_id, sensor_type, sequence)
                 );
                 INSERT INTO measurements_v2(
                   id,measurement_id,device_id,boot_id,sensor_type,measured_at,
                   sample_rate,cylinder_state,sequence,sample_count,
-                  health_score_target,condition_target,created_at
+                  health_score_target,condition_target,experiment_id,session_id,
+                  pressure_mpa,load_kg,ground_truth,ground_truth_source,created_at
                 )
                 SELECT id,measurement_id,device_id,COALESCE(boot_id,'legacy'),
                        sensor_type,measured_at,sample_rate,cylinder_state,
-                       sequence,sample_count,health_score_target,condition_target,created_at
+                       sequence,sample_count,health_score_target,condition_target,
+                       NULL,NULL,NULL,NULL,NULL,NULL,created_at
                 FROM measurements;
                 DROP TABLE measurements;
                 ALTER TABLE measurements_v2 RENAME TO measurements;
@@ -239,8 +253,8 @@ class Database:
         try:
             with self.transaction() as connection:
                 connection.execute(
-                    "INSERT INTO measurements(measurement_id,device_id,boot_id,sensor_type,measured_at,sample_rate,cylinder_state,sequence,sample_count,health_score_target,condition_target) VALUES(?,?,?,?,?,?,?,?,?,?,?)",
-                    (measurement_id, packet.device_id, packet.boot_id, packet.sensor_type, measured_at, packet.sample_rate, packet.cylinder_state, packet.sequence, len(packet.samples), packet.health_score_target, packet.condition_target),
+                    "INSERT INTO measurements(measurement_id,device_id,boot_id,sensor_type,measured_at,sample_rate,cylinder_state,sequence,sample_count,health_score_target,condition_target,experiment_id,session_id,pressure_mpa,load_kg,ground_truth,ground_truth_source) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                    (measurement_id, packet.device_id, packet.boot_id, packet.sensor_type, measured_at, packet.sample_rate, packet.cylinder_state, packet.sequence, len(packet.samples), packet.health_score_target, packet.condition_target, packet.experiment_id, packet.session_id, packet.pressure_mpa, packet.load_kg, packet.ground_truth, packet.ground_truth_source),
                 )
                 connection.executemany(
                     "INSERT INTO raw_sensor_data(measurement_id,sample_index,raw_value) VALUES(?,?,?)",
