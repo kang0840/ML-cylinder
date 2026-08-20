@@ -2,7 +2,7 @@
 Type=Application
 Name=스마트 실린더 데이터 실시간 확인
 Comment=원본 수신 DB와 가공·추론 DB 상태를 실시간으로 확인합니다
-Exec=/usr/bin/python3 /home/mother/Desktop/데이터_실시간_확인.py
+Exec=/usr/bin/python3 /home/mother/~AI_Project/project/tools/database_live_monitor.py
 Icon=utilities-system-monitor
 Terminal=true
 Categories=Utility;

@@ -140318,3 +140318,93 @@ Alternately, you can install this by running `pip install pycaret[models]`
 2026-08-19 17:21:46,618:WARNING:C:\Users\USER\OneDrive\Desktop\raspberry-pi-package\.venv-pycaret\Lib\site-packages\_distutils_hack\__init__.py:33: UserWarning: Setuptools is replacing distutils.
   warnings.warn("Setuptools is replacing distutils.")
 
+2026-08-20 17:55:11,714:WARNING:C:\Users\USER\OneDrive\Desktop\raspberry-pi-package\.venv-pycaret\Lib\site-packages\_distutils_hack\__init__.py:33: UserWarning: Setuptools is replacing distutils.
+  warnings.warn("Setuptools is replacing distutils.")
+
+2026-08-20 17:55:20,288:WARNING:C:\Users\USER\OneDrive\Desktop\raspberry-pi-package\.venv-pycaret\Lib\site-packages\_distutils_hack\__init__.py:33: UserWarning: Setuptools is replacing distutils.
+  warnings.warn("Setuptools is replacing distutils.")
+
+2026-08-20 17:55:55,401:WARNING:C:\Users\USER\OneDrive\Desktop\raspberry-pi-package\.venv-pycaret\Lib\site-packages\_distutils_hack\__init__.py:33: UserWarning: Setuptools is replacing distutils.
+  warnings.warn("Setuptools is replacing distutils.")
+
+2026-08-20 17:56:03,972:WARNING:C:\Users\USER\OneDrive\Desktop\raspberry-pi-package\.venv-pycaret\Lib\site-packages\_distutils_hack\__init__.py:33: UserWarning: Setuptools is replacing distutils.
+  warnings.warn("Setuptools is replacing distutils.")
+
+2026-08-20 17:56:59,691:WARNING:C:\Users\USER\OneDrive\Desktop\raspberry-pi-package\.venv-pycaret\Lib\site-packages\_distutils_hack\__init__.py:33: UserWarning: Setuptools is replacing distutils.
+  warnings.warn("Setuptools is replacing distutils.")
+
+2026-08-20 17:57:03,042:WARNING:C:\Users\USER\OneDrive\Desktop\raspberry-pi-package\.venv-pycaret\Lib\site-packages\_distutils_hack\__init__.py:33: UserWarning: Setuptools is replacing distutils.
+  warnings.warn("Setuptools is replacing distutils.")
+
+2026-08-20 17:57:06,331:WARNING:C:\Users\USER\OneDrive\Desktop\raspberry-pi-package\.venv-pycaret\Lib\site-packages\_distutils_hack\__init__.py:33: UserWarning: Setuptools is replacing distutils.
+  warnings.warn("Setuptools is replacing distutils.")
+
+2026-08-20 17:57:16,244:WARNING:C:\Users\USER\OneDrive\Desktop\raspberry-pi-package\.venv-pycaret\Lib\site-packages\_distutils_hack\__init__.py:33: UserWarning: Setuptools is replacing distutils.
+  warnings.warn("Setuptools is replacing distutils.")
+
+2026-08-20 17:57:16,497:WARNING:C:\Users\USER\OneDrive\Desktop\raspberry-pi-package\.venv-pycaret\Lib\site-packages\sklearn\base.py:493: UserWarning: X does not have valid feature names, but StandardScaler was fitted with feature names
+  warnings.warn(
+
+2026-08-20 17:57:16,497:WARNING:C:\Users\USER\OneDrive\Desktop\raspberry-pi-package\.venv-pycaret\Lib\site-packages\sklearn\base.py:493: UserWarning: X does not have valid feature names, but DecisionTreeClassifier was fitted with feature names
+  warnings.warn(
+
+2026-08-20 17:57:16,501:WARNING:C:\Users\USER\OneDrive\Desktop\raspberry-pi-package\.venv-pycaret\Lib\site-packages\sklearn\base.py:493: UserWarning: X does not have valid feature names, but StandardScaler was fitted with feature names
+  warnings.warn(
+
+2026-08-20 17:57:16,501:WARNING:C:\Users\USER\OneDrive\Desktop\raspberry-pi-package\.venv-pycaret\Lib\site-packages\sklearn\base.py:493: UserWarning: X does not have valid feature names, but DecisionTreeClassifier was fitted with feature names
+  warnings.warn(
+
+2026-08-20 17:57:16,509:WARNING:C:\Users\USER\OneDrive\Desktop\raspberry-pi-package\.venv-pycaret\Lib\site-packages\sklearn\base.py:493: UserWarning: X does not have valid feature names, but StandardScaler was fitted with feature names
+  warnings.warn(
+
+2026-08-20 17:57:16,509:WARNING:C:\Users\USER\OneDrive\Desktop\raspberry-pi-package\.venv-pycaret\Lib\site-packages\sklearn\base.py:493: UserWarning: X does not have valid feature names, but DecisionTreeClassifier was fitted with feature names
+  warnings.warn(
+
+2026-08-20 17:57:16,512:WARNING:C:\Users\USER\OneDrive\Desktop\raspberry-pi-package\.venv-pycaret\Lib\site-packages\sklearn\base.py:493: UserWarning: X does not have valid feature names, but StandardScaler was fitted with feature names
+  warnings.warn(
+
+2026-08-20 17:57:16,512:WARNING:C:\Users\USER\OneDrive\Desktop\raspberry-pi-package\.venv-pycaret\Lib\site-packages\sklearn\base.py:493: UserWarning: X does not have valid feature names, but DecisionTreeClassifier was fitted with feature names
+  warnings.warn(
+
+2026-08-20 17:57:16,530:WARNING:C:\Users\USER\OneDrive\Desktop\raspberry-pi-package\.venv-pycaret\Lib\site-packages\sklearn\base.py:493: UserWarning: X does not have valid feature names, but StandardScaler was fitted with feature names
+  warnings.warn(
+
+2026-08-20 17:57:16,530:WARNING:C:\Users\USER\OneDrive\Desktop\raspberry-pi-package\.venv-pycaret\Lib\site-packages\sklearn\base.py:493: UserWarning: X does not have valid feature names, but DecisionTreeRegressor was fitted with feature names
+  warnings.warn(
+
+2026-08-20 17:57:16,539:WARNING:C:\Users\USER\OneDrive\Desktop\raspberry-pi-package\.venv-pycaret\Lib\site-packages\sklearn\base.py:493: UserWarning: X does not have valid feature names, but StandardScaler was fitted with feature names
+  warnings.warn(
+
+2026-08-20 17:57:16,539:WARNING:C:\Users\USER\OneDrive\Desktop\raspberry-pi-package\.venv-pycaret\Lib\site-packages\sklearn\base.py:493: UserWarning: X does not have valid feature names, but DecisionTreeRegressor was fitted with feature names
+  warnings.warn(
+
+2026-08-20 17:59:48,683:WARNING:C:\Users\USER\OneDrive\Desktop\raspberry-pi-package\.venv-pycaret\Lib\site-packages\_distutils_hack\__init__.py:33: UserWarning: Setuptools is replacing distutils.
+  warnings.warn("Setuptools is replacing distutils.")
+
+2026-08-20 17:59:51,932:WARNING:C:\Users\USER\OneDrive\Desktop\raspberry-pi-package\.venv-pycaret\Lib\site-packages\_distutils_hack\__init__.py:33: UserWarning: Setuptools is replacing distutils.
+  warnings.warn("Setuptools is replacing distutils.")
+
+2026-08-20 17:59:55,271:WARNING:C:\Users\USER\OneDrive\Desktop\raspberry-pi-package\.venv-pycaret\Lib\site-packages\_distutils_hack\__init__.py:33: UserWarning: Setuptools is replacing distutils.
+  warnings.warn("Setuptools is replacing distutils.")
+
+2026-08-20 18:00:05,705:WARNING:C:\Users\USER\OneDrive\Desktop\raspberry-pi-package\.venv-pycaret\Lib\site-packages\_distutils_hack\__init__.py:33: UserWarning: Setuptools is replacing distutils.
+  warnings.warn("Setuptools is replacing distutils.")
+
+2026-08-20 18:00:05,923:WARNING:C:\Users\USER\OneDrive\Desktop\raspberry-pi-package\.venv-pycaret\Lib\site-packages\sklearn\base.py:493: UserWarning: X does not have valid feature names, but DecisionTreeClassifier was fitted with feature names
+  warnings.warn(
+
+2026-08-20 18:00:05,925:WARNING:C:\Users\USER\OneDrive\Desktop\raspberry-pi-package\.venv-pycaret\Lib\site-packages\sklearn\base.py:493: UserWarning: X does not have valid feature names, but DecisionTreeClassifier was fitted with feature names
+  warnings.warn(
+
+2026-08-20 18:00:05,932:WARNING:C:\Users\USER\OneDrive\Desktop\raspberry-pi-package\.venv-pycaret\Lib\site-packages\sklearn\base.py:493: UserWarning: X does not have valid feature names, but DecisionTreeClassifier was fitted with feature names
+  warnings.warn(
+
+2026-08-20 18:00:05,934:WARNING:C:\Users\USER\OneDrive\Desktop\raspberry-pi-package\.venv-pycaret\Lib\site-packages\sklearn\base.py:493: UserWarning: X does not have valid feature names, but DecisionTreeClassifier was fitted with feature names
+  warnings.warn(
+
+2026-08-20 18:00:05,948:WARNING:C:\Users\USER\OneDrive\Desktop\raspberry-pi-package\.venv-pycaret\Lib\site-packages\sklearn\base.py:493: UserWarning: X does not have valid feature names, but DecisionTreeRegressor was fitted with feature names
+  warnings.warn(
+
+2026-08-20 18:00:05,957:WARNING:C:\Users\USER\OneDrive\Desktop\raspberry-pi-package\.venv-pycaret\Lib\site-packages\sklearn\base.py:493: UserWarning: X does not have valid feature names, but DecisionTreeRegressor was fitted with feature names
+  warnings.warn(
+
