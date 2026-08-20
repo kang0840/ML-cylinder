@@ -1,0 +1,28 @@
+{
+  "vibration": {
+    "mean": -1091979.5,
+    "standard_deviation": 1748018.0,
+    "rms": 2061064.2,
+    "maximum": 1476800.0,
+    "minimum": -8234432.0,
+    "peak": 8234432.0,
+    "peak_to_peak": 9711232.0,
+    "crest_factor": 3.995233,
+    "dominant_frequency": 125.0,
+    "dominant_amplitude": 1501733.9,
+    "spectral_energy": 4956626600000.0
+  },
+  "sound": {
+    "mean": -7200.1797,
+    "standard_deviation": 75285.98,
+    "rms": 75629.5,
+    "maximum": 130262.0,
+    "minimum": -171100.0,
+    "peak": 171100.0,
+    "peak_to_peak": 301362.0,
+    "crest_factor": 2.2623448,
+    "dominant_frequency": 2625.0,
+    "dominant_amplitude": 72638.31,
+    "spectral_energy": 15221713000.0
+  }
+}

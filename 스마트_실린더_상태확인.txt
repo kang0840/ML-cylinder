@@ -1,0 +1,116 @@
+스마트 실린더 Raspberry Pi 상태 확인 명령
+==========================================
+
+1. 전체 서비스 상태 확인
+
+sudo systemctl status mosquitto --no-pager -l
+sudo systemctl status smart-cylinder --no-pager -l
+
+두 서비스 모두 Active: active (running)이면 정상입니다.
+
+2. 실시간 센서 수신 및 모델 추론 결과 확인
+
+sudo journalctl -u smart-cylinder -f -l
+
+정상 로그 예시:
+MQTT 연결 및 토픽 구독 완료
+측정 처리 완료: device=pico01 sensor=sph0645 prediction=normal
+측정 처리 완료: device=pico01 sensor=inmp441 prediction=normal
+HTTP/2 201 Created
+
+종료: Ctrl+C
+
+3. Mosquitto MQTT 포트 확인
+
+sudo ss -lntp | grep 1883
+
+4. Raspberry Pi IP 확인
+
+hostname -I
+
+5. 인터넷 및 Supabase 연결 확인
+
+ping -c 3 1.1.1.1
+curl -I --connect-timeout 5 https://supabase.com
+
+HTTP 상태 코드가 표시되면 HTTPS 연결이 정상입니다.
+curl (28)은 연결 시간 초과입니다.
+
+6. 서비스 재시작
+
+sudo systemctl restart mosquitto
+sudo systemctl restart smart-cylinder
+
+7. 서비스 시작 및 종료
+
+sudo systemctl start smart-cylinder
+sudo systemctl stop smart-cylinder
+
+주의:
+smart-cylinder 서비스가 실행 중일 때 /opt/smart-cylinder-pi5/main.py를
+별도로 실행하지 마세요. MQTT 수신과 데이터 처리가 중복될 수 있습니다.
+
+8. 분리된 데이터베이스 구조
+
+/opt/smart-cylinder-pi5/data/raw_ingest.db
+- Pico W에서 MQTT로 들어온 원본 패킷을 가장 먼저 저장합니다.
+- 처리 대기, 처리 중, 완료, 오류 상태를 기록합니다.
+- 서비스가 중단되어도 미처리 패킷은 남아 재시작 후 다시 처리됩니다.
+
+/opt/smart-cylinder-pi5/data/smart_cylinder.db
+- FFT 특징값, 센서별 모델 추론 결과, 통합 판정을 저장합니다.
+- Supabase 전송 실패 데이터도 upload_queue에 보관합니다.
+
+정상 동작 중에는 최신 패킷을 먼저 처리하여 웹 그래프가 빠르게 갱신됩니다.
+이전에 저장된 대기 데이터는 raw_ingest.db에 남아 이후 처리됩니다.
+
+9. 데이터베이스 초기화 및 이전 상태 확인
+
+cd /opt/smart-cylinder-pi5
+./venv/bin/python -m tools.init_split_databases
+
+출력 항목:
+analysis_database = 가공·추론 DB 경로
+ingest_database = 원본 수신 DB 경로
+legacy_pending_imported = 이전 단일 DB에서 옮긴 미처리 건수
+ingest_counts = pending/processing/done/error 건수
+
+10. 바탕화면 실시간 확인 프로그램
+
+바탕화면에서 "스마트 실린더 데이터 실시간 확인"을 실행합니다.
+파일: /home/mother/Desktop/데이터_실시간_확인.py
+
+표시 항목:
+- Mosquitto 및 smart-cylinder 서비스 상태
+- 원본 패킷 수신 대기, 처리 완료, 처리 오류 건수
+- 가장 최근에 수신한 패킷의 순번과 시간
+- 전체 측정, 추론, 통합 판정 건수
+- 진동(sph0645)과 소리(inmp441)의 최신 추론 결과
+- Supabase 전송 대기 건수
+
+화면은 2초마다 자동 갱신됩니다.
+종료: Ctrl+C
+
+11. 분리 DB 서비스 실행
+
+sudo systemctl start smart-cylinder
+sudo systemctl status smart-cylinder --no-pager -l
+
+현재 서비스가 inactive이면 실시간 화면의 숫자가 증가하지 않습니다.
+Mosquitto와 smart-cylinder가 모두 active여야 정상 수집됩니다.
+
+12. 처리 속도 개선 방식
+
+기존에는 센서 데이터 한 건마다 Excel 파일 전체를 여러 번 열고 저장하여
+파일이 커질수록 수신 대기 데이터가 빠르게 증가했습니다.
+
+현재는 다음과 같이 동작합니다.
+- MQTT 원본 패킷은 raw_ingest.db에 즉시 저장
+- FFT, 모델 추론, SQLite 저장을 우선 처리
+- Excel 기록은 별도 작업자가 결과를 모아 2초 또는 최대 100건 단위로 저장
+- Supabase 전송도 별도 작업자에서 수행
+
+새 코드 적용 후 서비스 재시작:
+sudo systemctl restart smart-cylinder
+
+실시간 화면에서 수신대기 숫자가 지속적으로 감소하는지 확인합니다.

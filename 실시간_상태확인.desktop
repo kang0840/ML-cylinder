@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=스마트 실린더 실시간 상태
+Comment=센서 수신, 모델 추론 및 Supabase 전송 로그 확인
+Exec=/home/mother/Desktop/실시간_상태확인.sh
+Icon=utilities-terminal
+Terminal=true
+Categories=Utility;
