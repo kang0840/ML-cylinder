@@ -7,7 +7,7 @@ from tools.compare_models_pycaret import (
 )
 
 
-def test_load_training_frame_uses_only_labelled_rows(tmp_path):
+def test_legacy_condition_target_is_never_used_as_ground_truth(tmp_path):
     path = tmp_path / "training.db"
     with sqlite3.connect(path) as connection:
         connection.executescript("""
@@ -33,12 +33,11 @@ def test_load_training_frame_uses_only_labelled_rows(tmp_path):
                 (measurement_id, *range(1, 12)),
             )
     frame = load_training_frame(path, "sph0645")
-    assert list(frame.columns) == ["measured_at", *FEATURES, "condition_target"]
-    assert len(frame) == 1
-    assert frame.iloc[0]["condition_target"] == "normal"
+    assert list(frame.columns) == ["measured_at","experiment_id","session_id",*FEATURES,"ground_truth"]
+    assert frame.empty
 
 
 def test_rejects_unlabelled_or_too_small_sensor_dataset(tmp_path):
-    data = pd.DataFrame({"measured_at": [], "condition_target": []})
+    data = pd.DataFrame({"measured_at": [], "experiment_id":[], "ground_truth": []})
     with pytest.raises(ValueError, match="insufficient"):
         validate_training_frame(data, "sph0645", min_rows=30)

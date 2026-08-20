@@ -26,8 +26,9 @@ def test_inference_is_written_read_back_and_marked_saved(tmp_path):
     workbook = load_workbook(path, read_only=True, data_only=True)
     rows = list(workbook[SHEET_NAME].iter_rows(values_only=True))
     assert rows[0] == HEADERS
-    assert rows[1][9] == "saved"
-    assert rows[1][10] is not None
+    status=HEADERS.index("db_status")
+    assert rows[1][status] == "saved"
+    assert rows[1][status+1] is not None
 
 
 def test_async_excel_store_batches_results_after_db_transfer(tmp_path):
@@ -47,4 +48,5 @@ def test_async_excel_store_batches_results_after_db_transfer(tmp_path):
     workbook = load_workbook(path, read_only=True, data_only=True)
     rows = list(workbook[SHEET_NAME].iter_rows(values_only=True))
     assert len(rows) == 4
-    assert all(row[9] == "saved" for row in rows[1:])
+    status=HEADERS.index("db_status")
+    assert all(row[status] == "saved" for row in rows[1:])

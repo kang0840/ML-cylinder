@@ -5,7 +5,17 @@ def payload():
     return {"device_id":"pico01","sensor_type":"sph0645","sample_rate":1600,"cylinder_state":"forward","sequence":1,"timestamp":1785830000,"samples":[1,2,3]}
 
 def test_valid_payload():
-    assert validate_sensor_payload(payload()).samples == (1.0, 2.0, 3.0)
+    packet=validate_sensor_payload(payload())
+    assert packet.samples == (1.0, 2.0, 3.0)
+    assert packet.cylinder_state == "extending"
+
+def test_ground_truth_requires_experiment_session_and_trusted_source():
+    value=payload();value.update({"ground_truth":"seal_leak"})
+    with pytest.raises(ValueError):validate_sensor_payload(value)
+    value.update({"experiment_id":"seal_leak_01","session_id":"session_01","ground_truth_source":"controlled_experiment","pressure_mpa":0.5,"load_kg":0})
+    packet=validate_sensor_payload(value)
+    assert packet.ground_truth=="seal_leak"
+    assert packet.pressure_mpa==0.5
 
 def test_invalid_sensor():
     value = payload(); value["sensor_type"] = "other"

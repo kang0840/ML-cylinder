@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=스마트 실린더 추론 결과
+Comment=센서별 최신 모델 추론 결과를 실시간으로 확인합니다
+Exec=/usr/bin/python3 /home/mother/Desktop/추론_실시간_확인.py
+Icon=utilities-system-monitor
+Terminal=true
+Categories=Utility;

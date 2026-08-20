@@ -17,7 +17,7 @@ FEATURES = [
     "peak_to_peak", "crest_factor", "dominant_frequency",
     "dominant_amplitude", "spectral_energy",
 ]
-SENSOR_ROLES = {"sph0645": "vibration", "inmp441": "sound"}
+SENSOR_ROLES = {"sph0645": "acoustic_vibration", "inmp441": "sound"}
 
 
 def load_training_frame(database_path: Path, sensor_type: str) -> pd.DataFrame:
@@ -25,19 +25,22 @@ def load_training_frame(database_path: Path, sensor_type: str) -> pd.DataFrame:
         raise ValueError(f"unknown sensor_type: {sensor_type}")
     columns = ", ".join(f"f.{name}" for name in FEATURES)
     query = f"""
-        SELECT m.measured_at, {columns}, m.condition_target
+        SELECT m.measured_at,m.experiment_id,m.session_id,{columns},m.ground_truth
         FROM measurements AS m
         JOIN feature_data AS f ON f.measurement_id = m.measurement_id
-        WHERE m.condition_target IS NOT NULL AND m.sensor_type = ?
+        WHERE m.ground_truth IS NOT NULL
+          AND m.ground_truth_source IN ('controlled_experiment','human_verified','maintenance_verified')
+          AND m.experiment_id IS NOT NULL AND m.session_id IS NOT NULL
+          AND m.sensor_type = ?
         ORDER BY m.measured_at, m.id
     """
     with sqlite3.connect(database_path) as connection:
         measurement_columns = {
             row[1] for row in connection.execute("PRAGMA table_info(measurements)")
         }
-        if "condition_target" not in measurement_columns:
+        if not {"ground_truth","ground_truth_source","experiment_id","session_id"}.issubset(measurement_columns):
             return pd.DataFrame(
-                columns=["measured_at", *FEATURES, "condition_target"]
+                columns=["measured_at","experiment_id","session_id",*FEATURES,"ground_truth"]
             )
         return pd.read_sql_query(query, connection, params=(sensor_type,))
 
@@ -47,10 +50,12 @@ def validate_training_frame(data: pd.DataFrame, sensor_type: str, min_rows: int)
         raise ValueError(
             f"{sensor_type} labelled rows are insufficient: {len(data)} < {min_rows}"
         )
-    if data["condition_target"].nunique() < 2:
+    if data["ground_truth"].nunique() < 2:
         raise ValueError(
-            f"{sensor_type} needs at least two distinct condition_target classes"
+            f"{sensor_type} needs at least two distinct ground_truth classes"
         )
+    if data["experiment_id"].nunique() < 3:
+        raise ValueError(f"{sensor_type} needs at least three independent experiments")
     timestamps = pd.to_datetime(data["measured_at"], utc=True, errors="coerce")
     if timestamps.isna().any() or not timestamps.is_monotonic_increasing:
         raise ValueError(f"{sensor_type} measured_at must be valid and time ordered")
@@ -78,15 +83,21 @@ def compare_sensor(
     from pycaret.classification import ClassificationExperiment
 
     # measured_at determines split order but must never become a model feature.
-    training = data.drop(columns=["measured_at"])
-    folds = max(2, min(fold, len(training) // 5))
+    from sklearn.model_selection import GroupShuffleSplit, GroupKFold
+    splitter=GroupShuffleSplit(n_splits=1,test_size=0.2,random_state=seed)
+    train_idx,test_idx=next(splitter.split(data,groups=data["experiment_id"]))
+    train=data.iloc[train_idx].copy();test=data.iloc[test_idx].copy()
+    train_groups=train["experiment_id"].copy()
+    training=train.drop(columns=["measured_at","experiment_id","session_id"])
+    testing=test.drop(columns=["measured_at","experiment_id","session_id"])
+    folds=max(2,min(fold,train_groups.nunique()))
     experiment = ClassificationExperiment()
     experiment.setup(
         data=training,
-        target="condition_target",
-        fold=folds,
-        fold_strategy="timeseries",
-        data_split_shuffle=False,
+        test_data=testing,
+        target="ground_truth",
+        fold_strategy=GroupKFold(n_splits=folds),
+        fold_groups=train_groups,
         fold_shuffle=False,
         session_id=seed,
         normalize=True,
@@ -112,6 +123,8 @@ def compare_sensor(
         "sensor_role": role,
         "feature_names": FEATURES,
         "training_rows": len(training),
+        "test_rows": len(testing),
+        "split_unit": "experiment_id",
         "training_start": str(data["measured_at"].iloc[0]),
         "training_end": str(data["measured_at"].iloc[-1]),
     }

@@ -15,6 +15,7 @@ from .ml_predictor import MLPredictor
 from .inference_excel_store import InferenceExcelStore
 from .supabase_uploader import SupabaseUploader
 from .state_fusion import fuse_sensor_results
+from .session_tracker import SessionTracker
 
 LOGGER = logging.getLogger(__name__)
 
@@ -26,8 +27,10 @@ class SensorPipeline:
         self.on_measurement_saved = on_measurement_saved
         self.excel_store = excel_store
         self.rul_predictor = rul_predictor
+        self.session_tracker = SessionTracker()
 
     def process(self, payload: dict) -> str | None:
+        payload = self.session_tracker.enrich(payload)
         expanded = expand_dual_microphone_payload(payload)
         if len(expanded) > 1:
             saved = [self._process_one(item) for item in expanded]
@@ -60,6 +63,11 @@ class SensorPipeline:
             result = self.excel_store.record_pending(
                 measurement_id, measured_at, packet.device_id, packet.sensor_type,
                 packet.cylinder_state, result,
+                metadata={**metadata,"experiment_id":packet.experiment_id,
+                          "session_id":packet.session_id,"pressure_mpa":packet.pressure_mpa,
+                          "load_kg":packet.load_kg,"ground_truth":packet.ground_truth,
+                          "ground_truth_source":packet.ground_truth_source},
+                features=features,
             )
         try:
             measurement_id = self.database.save_measurement(packet, features, result, measurement_id)
@@ -79,8 +87,14 @@ class SensorPipeline:
         upload_payload = {
             "measurement_id": measurement_id, "device_id": packet.device_id,
             "sensor_type": packet.sensor_type,
+            "experiment_id": packet.experiment_id,
+            "session_id": packet.session_id,
             "measured_at": measured_at,
             "cylinder_state": packet.cylinder_state,
+            "pressure_mpa": packet.pressure_mpa,
+            "load_kg": packet.load_kg,
+            "ground_truth": packet.ground_truth,
+            "ground_truth_source": packet.ground_truth_source,
             "vibration_rms": features["rms"] if packet.sensor_type == "sph0645" else None,
             "sound_rms": features["rms"] if packet.sensor_type == "inmp441" else None,
             "dominant_frequency": features["dominant_frequency"],

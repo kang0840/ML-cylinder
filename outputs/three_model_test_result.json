@@ -1,0 +1,15 @@
+{
+  "overall_status": "seal_leak",
+  "remaining_life_percent": 54.6,
+  "vibration": {
+    "prediction": "normal",
+    "confidence": 0.97145,
+    "model_version": "pycaret-random-ensemble-20260812T105706Z"
+  },
+  "sound": {
+    "prediction": "normal",
+    "confidence": 0.993952,
+    "model_version": "pycaret-random-ensemble-20260812T105731Z"
+  },
+  "life_model_version": "pycaret-random-ensemble-20260812T105756Z"
+}
