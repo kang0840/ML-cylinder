@@ -1,6 +1,8 @@
 const API_ROOT = location.hostname.endsWith('github.io')
   ? 'https://ml-cylinder.onrender.com'
   : window.location.origin;
+const replayMode = new URLSearchParams(location.search).get('mode') === 'replay';
+const dataSource = replayMode ? 'replay' : 'live';
 const SENSOR_STALE_AFTER_MS = 10_000;
 const $ = id => document.getElementById(id);
 const labels = {
@@ -67,7 +69,9 @@ function draw(canvas, lines) {
 
 async function refresh() {
   try {
-    const response = await fetch(`${API_ROOT}/api/real-cylinder?limit=100`);
+    const response = await fetch(
+      `${API_ROOT}/api/real-cylinder?limit=100&source=${dataSource}`
+    );
     if (!response.ok) throw new Error(`API ${response.status}`);
     const data = await response.json();
     const rows = data.history || [];
@@ -76,6 +80,10 @@ async function refresh() {
 
     lastReceivedAt = latest.measured_at || lastReceivedAt;
     updateConnectionStatus(lastReceivedAt);
+    if (replayMode) {
+      $('connection').textContent = '재생 데이터 모드 — 실제 센서/PLC 제어와 분리됨';
+      $('connection').className = 'connection bad';
+    }
     const vp = latest.vibration_prediction || latest.prediction;
     const sp = latest.sound_prediction || latest.prediction;
     const vc = latest.vibration_confidence ?? latest.confidence;
@@ -95,7 +103,8 @@ async function refresh() {
       { values: rows.map(row => Number(row.vibration_rms || 0)), color: '#42c7ff' },
       { values: rows.map(row => Number(row.sound_rms || 0)), color: '#ffc04c' },
     ]);
-    $('note').textContent = `최근 ${rows.length}개 결과 · 마지막 측정 ${receivedTimeText(lastReceivedAt)} · RUL 상태: ${latest.rul_status || '수명 데이터 부족'}`;
+    const sourceLabel = replayMode ? '재생 데이터' : '실시간 센서 데이터';
+    $('note').textContent = `${sourceLabel} · 최근 ${rows.length}개 결과 · 마지막 측정 ${receivedTimeText(lastReceivedAt)} · RUL 상태: ${latest.rul_status || '수명 데이터 부족'}`;
   } catch (error) {
     if (lastReceivedAt) {
       $('connection').textContent = `센서 데이터 수신 중단 — 마지막 수신: ${receivedTimeText(lastReceivedAt)}`;

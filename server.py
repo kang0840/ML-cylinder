@@ -200,12 +200,13 @@ initialize_admin()
 factory_twin = FactoryDigitalTwin()
 
 
-def real_cylinder_rows(limit: int = 120) -> list[dict]:
-    """Read real Pi measurements locally, or their Supabase mirror on Render."""
+def real_cylinder_rows(limit: int = 120, data_source: str = "live") -> list[dict]:
+    """Read live local Pi data when available, otherwise its Supabase mirror."""
     database_path = Path(os.environ.get(
         "SENSOR_DATABASE_PATH", str(ROOT / "data" / "smart_cylinder.db")
     ))
-    if database_path.exists():
+    # Replay rows intentionally never enter the local operational database.
+    if data_source == "live" and database_path.exists():
         with sqlite3.connect(database_path) as connection:
             connection.row_factory = sqlite3.Row
             rows = connection.execute(
@@ -236,13 +237,24 @@ def real_cylinder_rows(limit: int = 120) -> list[dict]:
     url = os.environ.get("SUPABASE_URL", "").strip()
     key = os.environ.get("SUPABASE_KEY", "").strip()
     table = os.environ.get("SUPABASE_TABLE", "smart_cylinder_analysis").strip()
+
     if not (url and key):
         return []
+
     from supabase import create_client
+
     response = (
-        create_client(url, key).table(table)
-        .select("measured_at,cylinder_state,vibration_rms,sound_rms,prediction,confidence,health_score,model_version")
-        .order("measured_at", desc=True).limit(limit).execute()
+        create_client(url, key)
+        .table(table)
+        .select(
+            "measurement_id,measured_at,cylinder_state,"
+            "vibration_rms,sound_rms,prediction,confidence,health_score,"
+            "model_version,data_source,replay_source_measured_at,replay_run_id"
+        )
+        .eq("data_source", data_source)
+        .order("measured_at", desc=True)
+        .limit(limit)
+        .execute()
     )
     return list(reversed(response.data or []))
 
@@ -355,14 +367,17 @@ def api_factory_history():
 def api_real_cylinder():
     try:
         limit = max(1, min(300, int(request.args.get("limit", "120"))))
-        rows = real_cylinder_rows(limit)
+        data_source = request.args.get("source", "live").strip().lower()
+        if data_source not in {"live", "replay"}:
+            return jsonify({"error": "invalid_source"}), 400
+        rows = real_cylinder_rows(limit, data_source)
     except (ValueError, sqlite3.Error) as exc:
         return jsonify({"error": "real_data_unavailable", "message": str(exc)}), 503
     for row in rows:
         state = str(row.get("cylinder_state", "idle"))
         row["direction_value"] = 1 if state == "forward" else -1 if state == "backward" else 0
     return jsonify({
-        "source": "real_sensor_database",
+        "source": data_source,
         "count": len(rows),
         "latest": rows[-1] if rows else None,
         "history": rows,
