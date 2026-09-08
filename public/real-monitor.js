@@ -64,6 +64,17 @@ function draw(canvas, lines) {
       index ? c.lineTo(x, y) : c.moveTo(x, y);
     });
     c.stroke();
+
+    // A one-item history has no line segment, so draw its actual point.
+    if (line.values.length === 1 && Number.isFinite(line.values[0])) {
+      const value = line.values[0];
+      const x = p.l + pw / 2;
+      const y = p.t + (max - value) / (max - min) * ph;
+      c.fillStyle = line.color;
+      c.beginPath();
+      c.arc(x, y, 4, 0, Math.PI * 2);
+      c.fill();
+    }
   });
 }
 
