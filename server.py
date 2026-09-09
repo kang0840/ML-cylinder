@@ -391,6 +391,19 @@ def admin_serials():
     return jsonify({"serials": storage.list()})
 
 
+@app.route("/api/admin/serials", methods=["POST"])
+def admin_add_serial():
+    """Register an operator-supplied SCC serial after administrator login."""
+    if not require_admin():
+        return jsonify({"error": "unauthorized"}), 401
+    serial = normalize_serial(read_json_payload().get("serial", ""))
+    if not serial:
+        return jsonify({"error": "invalid_serial"}), 400
+    if storage.exists(serial):
+        return jsonify({"error": "serial_exists", "serial": serial}), 409
+    return jsonify(storage.add(serial)), 201
+
+
 @app.route("/api/purchase", methods=["POST"])
 def api_purchase():
     serial = ""
