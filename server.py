@@ -102,12 +102,23 @@ class PostgresSerialStorage:
             ).fetchone()
             return row is not None
 
-    def add(self, serial: str) -> dict:
+    def add(self, serial: str, purchased_at: str | None = None) -> dict:
         with self._connect() as connection:
-            row = connection.execute(
-                "INSERT INTO serials (serial) VALUES (%s) RETURNING purchased_at",
-                (serial,),
-            ).fetchone()
+            if purchased_at:
+                row = connection.execute(
+                    """INSERT INTO serials (serial, purchased_at) VALUES (%s, %s)
+                    ON CONFLICT (serial) DO NOTHING RETURNING purchased_at""",
+                    (serial, purchased_at),
+                ).fetchone()
+            else:
+                row = connection.execute(
+                    "INSERT INTO serials (serial) VALUES (%s) RETURNING purchased_at",
+                    (serial,),
+                ).fetchone()
+            if row is None:
+                row = connection.execute(
+                    "SELECT purchased_at FROM serials WHERE serial = %s", (serial,)
+                ).fetchone()
         return {"serial": serial, "purchasedAt": row[0].isoformat()}
 
     def list(self):
@@ -139,7 +150,17 @@ def create_storage():
     if not database_url:
         return JsonSerialStorage(SERIAL_DB)
     try:
-        return PostgresSerialStorage(database_url)
+        storage = PostgresSerialStorage(database_url)
+        # Render's PostgreSQL starts empty; retain serials already saved in the
+        # repository's local JSON source.  Repeated deploys cannot duplicate rows.
+        try:
+            legacy = json.loads(SERIAL_DB.read_text(encoding="utf-8"))
+            for serial, entry in legacy.items():
+                if isinstance(serial, str) and serial.startswith("SCC-"):
+                    storage.add(serial, str(entry.get("purchasedAt", "")) or None)
+        except (OSError, ValueError, AttributeError):
+            pass
+        return storage
     except Exception as exc:
         print(f"Warning: DATABASE_URL unavailable; falling back to JSON storage: {exc}")
         return JsonSerialStorage(SERIAL_DB)
