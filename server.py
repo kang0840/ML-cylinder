@@ -15,6 +15,7 @@ import time
 from flask import Flask, jsonify, make_response, request, send_from_directory
 
 from src.factory_twin import FactoryDigitalTwin
+from system.Backend.API.cylinder_result import cylinder_result_blueprint
 
 try:
     import psycopg
@@ -326,6 +327,7 @@ def build_cors_response(response):
 # needed here.
 app = Flask(__name__)
 app.after_request(build_cors_response)
+app.register_blueprint(cylinder_result_blueprint)
 
 
 @app.route("/health")

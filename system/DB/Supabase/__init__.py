@@ -1,0 +1,1 @@
+"""Supabase persistence adapters."""
