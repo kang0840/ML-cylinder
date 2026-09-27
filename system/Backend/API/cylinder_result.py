@@ -11,7 +11,6 @@ from system.Backend.Service.cylinder_result_service import (
     CylinderResultService,
 )
 
-
 cylinder_result_blueprint = Blueprint("cylinder_result", __name__, url_prefix="/api")
 _service = CylinderResultService()
 
@@ -67,7 +66,9 @@ def _validate_payload(payload: dict[str, Any]) -> str | None:
     if not isinstance(payload["timestamp"], str):
         return "timestamp must be an ISO 8601 string"
     try:
-        measured_at = datetime.fromisoformat(payload["timestamp"].replace("Z", "+00:00"))
+        measured_at = datetime.fromisoformat(
+            payload["timestamp"].replace("Z", "+00:00")
+        )
     except ValueError:
         return "timestamp must be an ISO 8601 string"
     if measured_at.tzinfo is None:
