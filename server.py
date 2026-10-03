@@ -1,4 +1,4 @@
-﻿from pathlib import Path
+from pathlib import Path
 import argparse
 import base64
 import datetime
@@ -11,6 +11,7 @@ import secrets
 import sqlite3
 import threading
 import time
+import uuid
 
 from flask import Flask, jsonify, make_response, request, send_from_directory
 
@@ -146,6 +147,144 @@ class PostgresSerialStorage:
             """, (value,))
 
 
+class ProcessOrderNotFoundError(RuntimeError):
+    """Raised when a process order does not exist."""
+
+
+class ProcessOrderStateError(RuntimeError):
+    """Raised when an order is not ready for the requested transition."""
+
+
+class ProcessOrderConflictError(RuntimeError):
+    """Raised when a completed manual input is changed."""
+
+
+class PostgresProcessOrderStorage:
+    """Store A/B process orders and manual judgments in Supabase Postgres."""
+
+    ORDER_SELECT = """
+        SELECT o.order_id::text AS order_id,
+               o.product_name,
+               o.requested_product,
+               o.status,
+               o.created_at,
+               o.started_at,
+               o.completed_at,
+               o.start_dispatch_state,
+               o.start_published_at,
+               j.detected_product,
+               j.judgment,
+               j.detection_source,
+               j.created_at AS judgment_created_at,
+               j.dispatch_state AS judgment_dispatch_state,
+               j.published_at AS judgment_published_at
+        FROM process_orders AS o
+        LEFT JOIN process_judgments AS j ON j.order_id = o.order_id
+    """
+
+    def __init__(self, database_url: str):
+        if psycopg is None:
+            raise RuntimeError("DATABASE_URL is configured but psycopg is unavailable")
+        self.database_url = database_url
+
+    def _connect(self):
+        return psycopg.connect(self.database_url)
+
+    @staticmethod
+    def _row(cursor, row):
+        if row is None:
+            return None
+        result = dict(zip((column.name for column in cursor.description), row))
+        for key, value in tuple(result.items()):
+            if isinstance(value, (datetime.date, datetime.datetime, uuid.UUID)):
+                result[key] = (
+                    value.isoformat() if hasattr(value, "isoformat") else str(value)
+                )
+        return result
+
+    def create_order(self, product_name: str, requested_product: str) -> dict:
+        with self._connect() as connection:
+            cursor = connection.execute(
+                """
+                INSERT INTO process_orders (product_name, requested_product)
+                VALUES (%s, %s)
+                RETURNING order_id::text
+                """,
+                (product_name, requested_product),
+            )
+            order_id = cursor.fetchone()[0]
+        return self.get_order(order_id)
+
+    def list_orders(self, limit: int = 50) -> list[dict]:
+        with self._connect() as connection:
+            cursor = connection.execute(
+                self.ORDER_SELECT + " ORDER BY o.created_at DESC LIMIT %s", (limit,)
+            )
+            return [self._row(cursor, row) for row in cursor.fetchall()]
+
+    def get_order(self, order_id: str) -> dict:
+        with self._connect() as connection:
+            cursor = connection.execute(
+                self.ORDER_SELECT + " WHERE o.order_id = %s", (order_id,)
+            )
+            row = self._row(cursor, cursor.fetchone())
+        if row is None:
+            raise ProcessOrderNotFoundError("process order not found")
+        return row
+
+    def create_manual_judgment(
+        self, order_id: str, detected_product: str
+    ) -> tuple[dict, bool]:
+        with self._connect() as connection:
+            cursor = connection.execute(
+                """
+                SELECT requested_product, status
+                FROM process_orders
+                WHERE order_id = %s
+                FOR UPDATE
+                """,
+                (order_id,),
+            )
+            order = cursor.fetchone()
+            if order is None:
+                raise ProcessOrderNotFoundError("process order not found")
+
+            existing = connection.execute(
+                """
+                SELECT detected_product
+                FROM process_judgments
+                WHERE order_id = %s
+                """,
+                (order_id,),
+            ).fetchone()
+            if existing is not None:
+                if existing[0] != detected_product:
+                    raise ProcessOrderConflictError(
+                        "manual detection already recorded with a different value"
+                    )
+                created = False
+            else:
+                if order[1] != "STARTED":
+                    raise ProcessOrderStateError(
+                        "manual detection requires a STARTED order"
+                    )
+                judgment = "OK" if order[0] == detected_product else "NG"
+                connection.execute(
+                    """
+                    INSERT INTO process_judgments (
+                        order_id,
+                        requested_product,
+                        detected_product,
+                        judgment,
+                        detection_source
+                    ) VALUES (%s, %s, %s, %s, 'MANUAL')
+                    """,
+                    (order_id, order[0], detected_product, judgment),
+                )
+                created = True
+        return self.get_order(order_id), created
+
+
 def create_storage():
     database_url = os.environ.get("DATABASE_URL", "").strip()
     if not database_url:
@@ -169,6 +308,7 @@ def create_storage():
 
 DATABASE_URL = os.environ.get("DATABASE_URL", "").strip()
 storage = create_storage()
+process_order_storage = PostgresProcessOrderStorage(DATABASE_URL) if DATABASE_URL else None
 
 PBKDF2_ITERATIONS = 500_000
 ADMIN_SESSIONS = {}
@@ -300,6 +440,24 @@ def read_json_payload():
     return request.get_json(silent=True) or {}
 
 
+def process_storage():
+    if process_order_storage is None:
+        raise RuntimeError("process order database is unavailable")
+    return process_order_storage
+
+
+def normalize_process_product(value):
+    product = str(value or "").strip().upper()
+    return product if product in {"A", "B"} else ""
+
+
+def valid_order_id(value):
+    try:
+        return str(uuid.UUID(str(value)))
+    except (ValueError, TypeError, AttributeError):
+        return ""
+
+
 def bearer_token():
     header = request.headers.get("Authorization", "")
     return header[7:] if header.startswith("Bearer ") else ""
@@ -407,6 +565,78 @@ def api_real_cylinder():
     })
 
 
+@app.route("/api/process-orders", methods=["GET", "POST"])
+def api_process_orders():
+    """Create an A/B order or list recent process orders."""
+    try:
+        order_storage = process_storage()
+        if request.method == "GET":
+            try:
+                limit = int(request.args.get("limit", "50"))
+            except ValueError:
+                return jsonify({"error": "invalid_limit"}), 400
+            if not 1 <= limit <= 100:
+                return jsonify({"error": "invalid_limit", "range": [1, 100]}), 400
+            return jsonify({"orders": order_storage.list_orders(limit)})
+
+        payload = read_json_payload()
+        product_name = str(payload.get("product_name", "")).strip()
+        requested_product = normalize_process_product(payload.get("requested_product"))
+        if not 1 <= len(product_name) <= 100:
+            return jsonify({"error": "invalid_product_name"}), 400
+        if not requested_product:
+            return (
+                jsonify({"error": "invalid_requested_product", "allowed": ["A", "B"]}),
+                400,
+            )
+        return jsonify(order_storage.create_order(product_name, requested_product)), 201
+    except RuntimeError as exc:
+        return jsonify({"error": "process_order_unavailable", "message": str(exc)}), 503
+
+
+@app.route("/api/process-orders/<order_id>")
+def api_process_order(order_id):
+    """Return one order together with its optional final judgment."""
+    normalized = valid_order_id(order_id)
+    if not normalized:
+        return jsonify({"error": "invalid_order_id"}), 400
+    try:
+        return jsonify(process_storage().get_order(normalized))
+    except ProcessOrderNotFoundError:
+        return jsonify({"error": "process_order_not_found"}), 404
+    except RuntimeError as exc:
+        return jsonify({"error": "process_order_unavailable", "message": str(exc)}), 503
+
+
+@app.route("/api/process-orders/<order_id>/manual-detection", methods=["POST"])
+def api_manual_detection(order_id):
+    """Record the temporary manual A/B detector result exactly once."""
+    normalized = valid_order_id(order_id)
+    if not normalized:
+        return jsonify({"error": "invalid_order_id"}), 400
+    detected_product = normalize_process_product(
+        read_json_payload().get("detected_product")
+    )
+    if not detected_product:
+        return (
+            jsonify({"error": "invalid_detected_product", "allowed": ["A", "B"]}),
+            400,
+        )
+    try:
+        order, created = process_storage().create_manual_judgment(
+            normalized, detected_product
+        )
+        return jsonify({**order, "created": created}), 201 if created else 200
+    except ProcessOrderNotFoundError:
+        return jsonify({"error": "process_order_not_found"}), 404
+    except ProcessOrderStateError as exc:
+        return jsonify({"error": "invalid_order_state", "message": str(exc)}), 409
+    except ProcessOrderConflictError as exc:
+        return jsonify({"error": "manual_detection_conflict", "message": str(exc)}), 409
+    except RuntimeError as exc:
+        return jsonify({"error": "process_order_unavailable", "message": str(exc)}), 503
+
+
 @app.route("/api/admin/serials")
 def admin_serials():
     if not require_admin():
@@ -488,6 +718,8 @@ def handle_options(path):
 def serve_static(path):
     if path in {"", "."}:
         path = "index.html"
+    if path == "order-system.html":
+        return send_from_directory(ROOT, path)
     return send_from_directory(PUBLIC_DIR, path)
 
 
