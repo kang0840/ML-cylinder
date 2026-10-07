@@ -65,12 +65,35 @@ function draw(canvas, lines) {
     c.strokeStyle = line.color;
     c.lineWidth = 2;
     c.beginPath();
+    let active = false;
     line.values.forEach((value, index) => {
+      if (!Number.isFinite(value))
+      {
+          active = false;
+          return;
+      }
       const x = p.l + pw * index / Math.max(line.values.length - 1, 1);
       const y = p.t + (max - value) / (max - min) * ph;
-      index ? c.lineTo(x, y) : c.moveTo(x, y);
+      active ? c.lineTo(x, y) : c.moveTo(x, y);
+      active = true;
     });
     c.stroke();
+
+    // Preserve isolated real points on either side of a missing packet.
+    if (line.values.length > 1)
+    {
+        line.values.forEach((value, index) =>
+        {
+            if (!Number.isFinite(value) || Number.isFinite(line.values[index - 1])
+                || Number.isFinite(line.values[index + 1])) return;
+            const x = p.l + pw * index / (line.values.length - 1);
+            const y = p.t + (max - value) / (max - min) * ph;
+            c.fillStyle = line.color;
+            c.beginPath();
+            c.arc(x, y, 3, 0, Math.PI * 2);
+            c.fill();
+        });
+    }
 
     // A one-item history has no line segment, so draw its actual point.
     if (line.values.length === 1 && Number.isFinite(line.values[0])) {
@@ -170,8 +193,8 @@ function renderCanonical(data)
     text('motion', latest?.operation_status, 'REFERENCE REQUIRED');
     text('prediction', latest?.prediction, 'NO PREDICTION');
     $('prediction').className = 'value';
-    text('health', null, 'DATA REQUIRED');
-    text('rul', null, 'DATA REQUIRED');
+    text('health', null, '기준 데이터 부족');
+    text('rul', null, '수명 데이터 부족');
     text('vibration', latest?.sph0645_status, 'WAITING FOR SENSOR');
     text('sound', latest?.inmp441_status, 'WAITING FOR SENSOR');
     text('vibrationConfidence', null, 'NO PREDICTION');
@@ -180,8 +203,30 @@ function renderCanonical(data)
     text('mlState', latest?.ml_status, 'MODEL REQUIRED');
     text('lastReceive', lastReceivedAt ? receivedTimeText(lastReceivedAt) : null, 'NO LIVE DATA');
     text('fftState', latest?.fft_features ? JSON.stringify(latest.fft_features) : null, 'WAITING FOR OPERATION');
-    text('sphRms', latest?.vibration_rms, 'WAITING FOR OPERATION');
-    text('inmpRms', latest?.sound_rms, 'WAITING FOR OPERATION');
+    text('sphRms', latest?.packet_metrics?.sph0645?.rms, 'WAITING FOR SENSOR');
+    text('inmpRms', latest?.packet_metrics?.inmp441?.rms, 'WAITING FOR SENSOR');
+    text('sphPeak', latest?.packet_metrics?.sph0645?.peak, 'WAITING FOR SENSOR');
+    text('inmpPeak', latest?.packet_metrics?.inmp441?.peak, 'WAITING FOR SENSOR');
+    text('cycleSphRms', latest?.vibration_rms, 'WAITING FOR OPERATION');
+    text('cycleInmpRms', latest?.sound_rms, 'WAITING FOR OPERATION');
+    const packetRows = (data.history || []).filter(row => row.session_id === latest?.session_id);
+    function packetSeries(sensor)
+    {
+        const values = [];
+        let previous = null;
+        for (const row of packetRows)
+        {
+            if (previous !== null && row.sequence_id !== previous + 1) values.push(null);
+            const value = row.packet_metrics?.[sensor]?.rms;
+            values.push(Number.isFinite(value) ? value : null);
+            previous = row.sequence_id;
+        }
+        return values;
+    }
+    draw($('packetChart'), [
+        { values: packetSeries('sph0645'), color: '#42c7ff' },
+        { values: packetSeries('inmp441'), color: '#ffc04c' },
+    ]);
     // A Cycle feature is not a feature for every Raw packet. Show one real
     // Cycle point rather than repeating it along the Raw message history.
     draw($('sensorChart'), [
