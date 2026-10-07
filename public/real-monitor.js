@@ -131,21 +131,14 @@ async function refresh() {
       $('connection').textContent = '재생 데이터 모드 — 실제 센서/PLC 제어와 분리됨';
       $('connection').className = 'connection bad';
     }
-    const vp = latest.vibration_prediction || latest.prediction;
-    const sp = latest.sound_prediction || latest.prediction;
-    const vc = latest.vibration_confidence ?? latest.confidence;
-    const sc = latest.sound_confidence ?? latest.confidence;
     $('motion').textContent = labels[latest.cylinder_state] || latest.cylinder_state;
     $('prediction').textContent = labels[latest.prediction] || latest.prediction;
     $('prediction').className = `value ${latest.prediction === 'normal' ? 'ok' : 'fault'}`;
-    $('health').textContent = `${Number(latest.health_score).toFixed(1)}점`;
     $('rul').textContent = latest.remaining_life_percent == null
       ? '수명 데이터 부족'
       : `${Number(latest.remaining_life_percent).toFixed(1)}%`;
-    $('vibration').textContent = labels[vp] || vp;
-    $('vibrationConfidence').textContent = vc == null ? '--' : `${Number(vc * 100).toFixed(1)}%`;
-    $('sound').textContent = labels[sp] || sp;
-    $('soundConfidence').textContent = sc == null ? '--' : `${Number(sc * 100).toFixed(1)}%`;
+    $('sensorRms').textContent = '재생 — 패킷 RMS 없음';
+    $('lastReceive').textContent = receivedTimeText(lastReceivedAt);
     draw($('sensorChart'), [
       { values: rows.map(row => row.vibration_rms == null ? NaN : Number(row.vibration_rms)), color: '#42c7ff' },
       { values: rows.map(row => row.sound_rms == null ? NaN : Number(row.sound_rms)), color: '#ffc04c' },
@@ -189,7 +182,7 @@ function renderCanonical(data)
         $('connection').textContent = 'NO LIVE DATA';
         $('connection').className = 'connection bad';
     }
-    const text = (id, value, absent) => { $(id).textContent = value == null ? absent : value; };
+    const text = (id, value, absent) => { if ($(id)) $(id).textContent = value == null ? absent : value; };
     text('motion', latest?.operation_status, 'REFERENCE REQUIRED');
     text('prediction', latest?.prediction, 'NO PREDICTION');
     $('prediction').className = 'value';
@@ -209,6 +202,9 @@ function renderCanonical(data)
     text('inmpPeak', latest?.packet_metrics?.inmp441?.peak, 'WAITING FOR SENSOR');
     text('cycleSphRms', latest?.vibration_rms, 'WAITING FOR OPERATION');
     text('cycleInmpRms', latest?.sound_rms, 'WAITING FOR OPERATION');
+    const rmsText = sensor => Number.isFinite(latest?.packet_metrics?.[sensor]?.rms)
+        ? latest.packet_metrics[sensor].rms.toFixed(2) : '수신 대기';
+    text('sensorRms', `${rmsText('sph0645')} / ${rmsText('inmp441')}`, '센서 수신 대기');
     const packetRows = (data.history || []).filter(row => row.session_id === latest?.session_id);
     function packetSeries(sensor)
     {
