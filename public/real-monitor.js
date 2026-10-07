@@ -2,7 +2,8 @@ const API_ROOT = location.hostname.endsWith('github.io')
   ? 'https://ml-cylinder.onrender.com'
   : window.location.origin;
 const replayMode = new URLSearchParams(location.search).get('mode') === 'replay';
-const dataSource = replayMode ? 'replay' : 'live';
+const dataSource = replayMode ? 'replay' : 'canonical';
+const serial = new URLSearchParams(location.search).get('serial') || '';
 const SENSOR_STALE_AFTER_MS = 10_000;
 const $ = id => document.getElementById(id);
 const labels = {
@@ -23,13 +24,19 @@ function receivedTimeText(value) {
 
 function updateConnectionStatus(measuredAt) {
   const receivedAt = new Date(measuredAt);
+    if (!measuredAt || Number.isNaN(receivedAt.getTime()) || receivedAt.getTime() > Date.now())
+    {
+        $('connection').textContent = 'NO LIVE DATA';
+        $('connection').className = 'connection bad';
+        return;
+    }
   const isStale = !Number.isNaN(receivedAt.getTime())
     && Date.now() - receivedAt.getTime() > SENSOR_STALE_AFTER_MS;
   if (isStale) {
     $('connection').textContent = `센서 데이터 수신 중단 — 마지막 수신: ${receivedTimeText(measuredAt)}`;
     $('connection').className = 'connection bad';
   } else {
-    $('connection').textContent = '데이터 연결됨';
+    $('connection').textContent = 'LIVE — 데이터 연결됨';
     $('connection').className = 'connection ok';
   }
 }
@@ -82,9 +89,15 @@ async function refresh() {
   try {
     const response = await fetch(
       `${API_ROOT}/api/real-cylinder?limit=100&source=${dataSource}`
+      + (replayMode ? '' : `&serial=${encodeURIComponent(serial)}`)
     );
-    if (!response.ok) throw new Error(`API ${response.status}`);
     const data = await response.json();
+    if (!response.ok) throw new Error(data.error || `API ${response.status}`);
+    if (!replayMode)
+    {
+        renderCanonical(data);
+        return;
+    }
     const rows = data.history || [];
     const latest = data.latest;
     if (!latest) throw new Error('저장된 측정 데이터가 없습니다');
@@ -111,12 +124,22 @@ async function refresh() {
     $('sound').textContent = labels[sp] || sp;
     $('soundConfidence').textContent = sc == null ? '--' : `${Number(sc * 100).toFixed(1)}%`;
     draw($('sensorChart'), [
-      { values: rows.map(row => Number(row.vibration_rms || 0)), color: '#42c7ff' },
-      { values: rows.map(row => Number(row.sound_rms || 0)), color: '#ffc04c' },
+      { values: rows.map(row => row.vibration_rms == null ? NaN : Number(row.vibration_rms)), color: '#42c7ff' },
+      { values: rows.map(row => row.sound_rms == null ? NaN : Number(row.sound_rms)), color: '#ffc04c' },
     ]);
     const sourceLabel = replayMode ? '재생 데이터' : '실시간 센서 데이터';
     $('note').textContent = `${sourceLabel} · 최근 ${rows.length}개 결과 · 마지막 측정 ${receivedTimeText(lastReceivedAt)} · RUL 상태: ${latest.rul_status || '수명 데이터 부족'}`;
   } catch (error) {
+    if (!replayMode)
+    {
+        renderCanonical({ latest: null });
+        $('connection').textContent = error.message === 'MAPPING_REQUIRED'
+            ? 'DEVICE MAPPING REQUIRED' : error.message === 'INVALID_SERIAL'
+                ? 'INVALID SERIAL' : '데이터 조회 실패 — LIVE 아님';
+        $('connection').className = 'connection bad';
+        $('note').textContent = error.message;
+        return;
+    }
     if (lastReceivedAt) {
       $('connection').textContent = `센서 데이터 수신 중단 — 마지막 수신: ${receivedTimeText(lastReceivedAt)}`;
       $('connection').className = 'connection bad';
@@ -126,6 +149,95 @@ async function refresh() {
     }
     $('note').textContent = error.message;
   }
+}
+
+function renderCanonical(data)
+{
+    const latest = data.latest;
+    lastReceivedAt = latest?.last_received_at || null;
+    updateConnectionStatus(lastReceivedAt);
+    if (latest?.live_status === 'STALE')
+    {
+        $('connection').textContent = 'STALE — 저장된 과거 데이터';
+        $('connection').className = 'connection bad';
+    }
+    else if (latest?.live_status !== 'LIVE')
+    {
+        $('connection').textContent = 'NO LIVE DATA';
+        $('connection').className = 'connection bad';
+    }
+    const text = (id, value, absent) => { $(id).textContent = value == null ? absent : value; };
+    text('motion', latest?.operation_status, 'REFERENCE REQUIRED');
+    text('prediction', latest?.prediction, 'NO PREDICTION');
+    $('prediction').className = 'value';
+    text('health', null, 'DATA REQUIRED');
+    text('rul', null, 'DATA REQUIRED');
+    text('vibration', latest?.sph0645_status, 'WAITING FOR SENSOR');
+    text('sound', latest?.inmp441_status, 'WAITING FOR SENSOR');
+    text('vibrationConfidence', null, 'NO PREDICTION');
+    text('soundConfidence', null, 'NO PREDICTION');
+    text('stftState', latest?.stft_status, 'STFT CONFIG REQUIRED');
+    text('mlState', latest?.ml_status, 'MODEL REQUIRED');
+    text('lastReceive', lastReceivedAt ? receivedTimeText(lastReceivedAt) : null, 'NO LIVE DATA');
+    text('fftState', latest?.fft_features ? JSON.stringify(latest.fft_features) : null, 'WAITING FOR OPERATION');
+    text('sphRms', latest?.vibration_rms, 'WAITING FOR OPERATION');
+    text('inmpRms', latest?.sound_rms, 'WAITING FOR OPERATION');
+    // A Cycle feature is not a feature for every Raw packet. Show one real
+    // Cycle point rather than repeating it along the Raw message history.
+    draw($('sensorChart'), [
+        { values: Number.isFinite(latest?.vibration_rms) ? [latest.vibration_rms] : [], color: '#42c7ff' },
+        { values: Number.isFinite(latest?.sound_rms) ? [latest.sound_rms] : [], color: '#ffc04c' },
+    ]);
+    $('note').textContent = latest
+        ? `${data.cylinder_id} · 측정 ${receivedTimeText(latest.timestamp)} · Pi 수신 ${receivedTimeText(lastReceivedAt)} · Feature ${latest.feature_timestamp ? receivedTimeText(latest.feature_timestamp) : 'WAITING FOR OPERATION'} · Preview SEQ ${latest.stft_preview_sequence_id ?? '--'} · Preview는 분석/학습 입력이 아닙니다`
+        : 'NO LIVE DATA — 센서 데이터 또는 장치 설정을 기다립니다';
+    for (const sensor of ['sph0645', 'inmp441'])
+    {
+        drawSpectrogram($(sensor + 'Preview'), latest?.stft_preview?.[sensor]);
+    }
+    $('previewState').textContent = latest?.stft_preview
+        ? `Web 전용 축약 Preview · SEQ ${latest.stft_preview_sequence_id} · 측정 ${receivedTimeText(latest.stft_preview_timestamp)} · ${latest.live_status === 'STALE' ? '과거 데이터 — STALE' : '현재 Preview의 측정 시각은 위 표시를 확인하세요'}`
+        : 'STFT PREVIEW REQUIRED — 설정 또는 계산 데이터 대기';
+}
+
+function drawSpectrogram(canvas, preview)
+{
+    const c = canvas.getContext('2d');
+    canvas.width = canvas.clientWidth * (devicePixelRatio || 1);
+    canvas.height = canvas.clientHeight * (devicePixelRatio || 1);
+    c.clearRect(0, 0, canvas.width, canvas.height);
+    if (!preview) return;
+    const { relative_times: times, frequencies, magnitude } = preview;
+    if (!Array.isArray(times) || !times.length || !Array.isArray(frequencies)
+        || !frequencies.length || !Array.isArray(magnitude)
+        || magnitude.length !== frequencies.length
+        || magnitude.some(row => !Array.isArray(row) || row.length !== times.length)
+        || [...times, ...frequencies, ...magnitude.flat()].some(v => !Number.isFinite(v) || v < 0)) return;
+    const width = canvas.width - 70;
+    const height = canvas.height - 50;
+    // Display-only per-preview intensity scale, not a detection threshold.
+    let maximum = 0;
+    for (const row of magnitude)
+    {
+        for (const value of row) maximum = Math.max(maximum, value);
+    }
+    for (let f = 0; f < frequencies.length; f++)
+    {
+        for (let t = 0; t < times.length; t++)
+        {
+            const intensity = maximum > 0 ? magnitude[f][t] / maximum : 0;
+            c.fillStyle = `rgb(${Math.round(255 * intensity)},${Math.round(180 * intensity)},${Math.round(90 + 165 * intensity)})`;
+            c.fillRect(60 + t * width / times.length, 10 + (frequencies.length - 1 - f) * height / frequencies.length,
+                width / times.length + 1, height / frequencies.length + 1);
+        }
+    }
+    c.fillStyle = '#eaf2f5';
+    c.font = '12px monospace';
+    c.fillText(`${frequencies.at(-1).toFixed(1)} Hz`, 0, 18);
+    c.fillText(`${frequencies[0].toFixed(1)} Hz`, 0, height + 10);
+    c.fillText(`${times[0].toFixed(3)}s`, 60, canvas.height - 22);
+    c.fillText(`${times.at(-1).toFixed(3)}s`, canvas.width - 65, canvas.height - 22);
+    c.fillText('Relative Time (s) / Frequency (Hz)', 60, canvas.height - 4);
 }
 
 addEventListener('resize', refresh);

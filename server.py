@@ -549,8 +549,60 @@ def api_real_cylinder():
     try:
         limit = max(1, min(300, int(request.args.get("limit", "120"))))
         data_source = request.args.get("source", "live").strip().lower()
-        if data_source not in {"live", "replay"}:
+        if data_source not in {"live", "replay", "canonical"}:
             return jsonify({"error": "invalid_source"}), 400
+        if data_source == "canonical":
+            from system.Backend.Service.cylinder_result_service import (
+                CylinderResultService,
+                ResultStorageUnavailableError,
+            )
+
+            try:
+                serial = normalize_serial(request.args.get("serial", ""))
+                if not serial or not storage.exists(serial):
+                    return (
+                        jsonify(
+                            {"error": "INVALID_SERIAL", "latest": None, "history": []}
+                        ),
+                        403,
+                    )
+                try:
+                    mapping = json.loads(
+                        os.environ.get("SERIAL_CYLINDER_MAPPING", "{}")
+                    )
+                    from system.MQTT.message_parser import ALLOWED_CYLINDER_IDS
+
+                    if not isinstance(mapping, dict) or any(
+                        not isinstance(s, str)
+                        or not SERIAL_PATTERN.fullmatch(s)
+                        or c not in ALLOWED_CYLINDER_IDS
+                        for s, c in mapping.items()
+                    ):
+                        raise ValueError("invalid mapping")
+                except (ValueError, TypeError):
+                    return (
+                        jsonify(
+                            {"error": "MAPPING_REQUIRED", "latest": None, "history": []}
+                        ),
+                        503,
+                    )
+                cylinder = mapping.get(serial)
+                if cylinder is None:
+                    return (
+                        jsonify(
+                            {"error": "MAPPING_REQUIRED", "latest": None, "history": []}
+                        ),
+                        409,
+                    )
+                result = CylinderResultService().monitoring(cylinder, limit)
+                result["serial"] = serial
+                return jsonify(result)
+            except ValueError:
+                return jsonify({"error": "invalid_cylinder"}), 400
+            except ResultStorageUnavailableError:
+                return jsonify({"error": "canonical_data_unavailable"}), 503
+            except Exception:
+                return jsonify({"error": "canonical_data_unavailable"}), 503
         rows = real_cylinder_rows(limit, data_source)
     except (ValueError, sqlite3.Error) as exc:
         return jsonify({"error": "real_data_unavailable", "message": str(exc)}), 503
