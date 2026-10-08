@@ -1,7 +1,7 @@
 # Raspberry Pi OS 64-bit / Python 3.13
 # Canonical common code; generated artifact, not a second editable source.
-# SHA-256: 71a3a137125a7b603d3d86f6533fbe1c4c2b05194c53c899bb75e5133c4eeec4
-./deploy/smart_cylinder_common-0.1.8-py3-none-any.whl
+# SHA-256: 497fc5542799e4bd33d0501fe32e8d91b61edd6a4acbf5267ec7baca78af8b0b
+./deploy/smart_cylinder_common-0.1.9-py3-none-any.whl
 numpy>=2.1,<3
 scipy>=1.14,<2
 pandas>=2.2,<3
