@@ -12,6 +12,11 @@ const labels = {
   internal_wear: '내부 마모', unknown: '판정 불가',
 };
 let lastReceivedAt = null;
+let refreshInFlight = false;
+let refreshTimer = null;
+let lastRenderedData = null;
+let failureCount = 0;
+const REQUEST_TIMEOUT_MS = 15_000;
 
 function receivedTimeText(value) {
   const date = new Date(value);
@@ -109,16 +114,30 @@ function draw(canvas, lines) {
 }
 
 async function refresh() {
+  if (refreshInFlight) return;
+  clearTimeout(refreshTimer);
+  refreshInFlight = true;
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+  let nextDelay = 2000;
   try {
     const response = await fetch(
       `${API_ROOT}/api/real-cylinder?limit=100&source=${dataSource}`
-      + (replayMode ? '' : `&serial=${encodeURIComponent(serial)}`)
+      + (replayMode ? '' : `&serial=${encodeURIComponent(serial)}`),
+      { signal: controller.signal }
     );
+    if (response.status === 429)
+    {
+        nextDelay = 60_000;
+        throw new Error('요청 제한 — 잠시 후 다시 조회합니다');
+    }
     const data = await response.json();
     if (!response.ok) throw new Error(data.error || `API ${response.status}`);
     if (!replayMode)
     {
         renderCanonical(data);
+        lastRenderedData = data;
+        failureCount = 0;
         return;
     }
     const rows = data.history || [];
@@ -146,14 +165,17 @@ async function refresh() {
     const sourceLabel = replayMode ? '재생 데이터' : '실시간 센서 데이터';
     $('note').textContent = `${sourceLabel} · 최근 ${rows.length}개 결과 · 마지막 측정 ${receivedTimeText(lastReceivedAt)} · RUL 상태: ${latest.rul_status || '수명 데이터 부족'}`;
   } catch (error) {
+    failureCount = Math.min(failureCount + 1, 5);
+    nextDelay = Math.max(nextDelay, Math.min(30_000, 2000 * 2 ** failureCount));
     if (!replayMode)
     {
-        renderCanonical({ latest: null });
+        if (!lastRenderedData) renderCanonical({ latest: null });
         $('connection').textContent = error.message === 'MAPPING_REQUIRED'
             ? 'DEVICE MAPPING REQUIRED' : error.message === 'INVALID_SERIAL'
                 ? 'INVALID SERIAL' : '데이터 조회 실패 — LIVE 아님';
         $('connection').className = 'connection bad';
-        $('note').textContent = error.message;
+        $('note').textContent = (error.name === 'AbortError' ? '조회 시간 초과' : error.message)
+            + (lastRenderedData ? ' · 마지막 저장 그래프 유지 — LIVE 아님' : '');
         return;
     }
     if (lastReceivedAt) {
@@ -164,6 +186,10 @@ async function refresh() {
       $('connection').className = 'connection bad';
     }
     $('note').textContent = error.message;
+  } finally {
+    clearTimeout(timeout);
+    refreshInFlight = false;
+    refreshTimer = setTimeout(refresh, nextDelay);
   }
 }
 
@@ -281,6 +307,8 @@ function drawSpectrogram(canvas, preview)
     c.fillText('Relative Time (s) / Frequency (Hz)', 60, canvas.height - 4);
 }
 
-addEventListener('resize', refresh);
+addEventListener('resize', () =>
+{
+    if (lastRenderedData && !replayMode) renderCanonical(lastRenderedData);
+});
 refresh();
-setInterval(refresh, 2000);
