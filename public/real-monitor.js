@@ -263,48 +263,124 @@ function renderCanonical(data)
         drawSpectrogram($(sensor + 'Preview'), latest?.stft_preview?.[sensor]);
     }
     $('previewState').textContent = latest?.stft_preview
-        ? `Web 전용 축약 Preview · SEQ ${latest.stft_preview_sequence_id} · 측정 ${receivedTimeText(latest.stft_preview_timestamp)} · ${latest.live_status === 'STALE' ? '과거 데이터 — STALE' : '현재 Preview의 측정 시각은 위 표시를 확인하세요'}`
+        ? `측정 구간 Preview · SEQ ${latest.stft_preview_sequence_id} · 측정 ${receivedTimeText(latest.stft_preview_timestamp)} · ${latest.live_status === 'STALE' ? '과거 측정 · 센서 갱신 중지 — STALE' : 'Preview 측정 시각은 위 표시를 확인하세요'}`
         : 'STFT PREVIEW REQUIRED — 설정 또는 계산 데이터 대기';
 }
 
 function drawSpectrogram(canvas, preview)
 {
     const c = canvas.getContext('2d');
-    canvas.width = canvas.clientWidth * (devicePixelRatio || 1);
-    canvas.height = canvas.clientHeight * (devicePixelRatio || 1);
-    c.clearRect(0, 0, canvas.width, canvas.height);
-    if (!preview) return;
+    const ratio = devicePixelRatio || 1;
+    const w = canvas.clientWidth;
+    const h = canvas.clientHeight;
+    canvas.width = w * ratio;
+    canvas.height = h * ratio;
+    c.scale(ratio, ratio);
+    c.clearRect(0, 0, w, h);
+    c.fillStyle = '#eaf2f5';
+    c.font = '13px sans-serif';
+    if (!preview)
+    {
+        c.fillText('STFT 데이터 대기', 16, 30);
+        return;
+    }
     const { relative_times: times, frequencies, magnitude } = preview;
     if (!Array.isArray(times) || !times.length || !Array.isArray(frequencies)
         || !frequencies.length || !Array.isArray(magnitude)
         || magnitude.length !== frequencies.length
         || magnitude.some(row => !Array.isArray(row) || row.length !== times.length)
-        || [...times, ...frequencies, ...magnitude.flat()].some(v => !Number.isFinite(v) || v < 0)) return;
-    const width = canvas.width - 70;
-    const height = canvas.height - 50;
-    // Display-only per-preview intensity scale, not a detection threshold.
+        || [...times, ...frequencies, ...magnitude.flat()].some(v => !Number.isFinite(v) || v < 0)
+        || times.some((v, i) => i > 0 && v <= times[i - 1])
+        || frequencies.some((v, i) => i > 0 && v <= frequencies[i - 1]))
+    {
+        c.fillText('STFT 표시 데이터 형식 확인 필요', 16, 30);
+        return;
+    }
+    const p = { l: 62, r: 70, t: 30, b: 100 };
+    const width = w - p.l - p.r;
+    const height = h - p.t - p.b;
+    if (width <= 0 || height <= 0) return;
+    const topDb = 60; // Display range only; not noise removal or a threshold.
     let maximum = 0;
     for (const row of magnitude)
     {
         for (const value of row) maximum = Math.max(maximum, value);
     }
+    // Use actual bin-centre coordinates, not equally spaced array indices.
+    // Midpoint edges are display estimates; do not imply extra resolution.
+    function edges(values)
+    {
+        if (values.length === 1)
+        {
+            const half = values[0] > 0 ? values[0] * 0.05 : 0.5;
+            return [Math.max(0, values[0] - half), values[0] + half];
+        }
+        return [Math.max(0, values[0] - (values[1] - values[0]) / 2),
+            ...values.slice(1).map((v, i) => (values[i] + v) / 2),
+            values.at(-1) + (values.at(-1) - values.at(-2)) / 2];
+    }
+    const timeEdges = edges(times);
+    const freqEdges = edges(frequencies);
+    const x = value => p.l + (value - timeEdges[0]) / (timeEdges.at(-1) - timeEdges[0]) * width;
+    const y = value => p.t + height - (value - freqEdges[0]) / (freqEdges.at(-1) - freqEdges[0]) * height;
+    // Approximate viridis with interpolated anchors: purple → green → yellow.
+    function color(intensity)
+    {
+        const stops = [[68, 1, 84], [59, 82, 139], [33, 145, 140], [94, 201, 98], [253, 231, 37]];
+        const index = Math.min(3, Math.floor(intensity * 4));
+        const fraction = intensity * 4 - index;
+        return `rgb(${stops[index].map((v, i) => Math.round(v + (stops[index + 1][i] - v) * fraction)).join(',')})`;
+    }
     for (let f = 0; f < frequencies.length; f++)
     {
         for (let t = 0; t < times.length; t++)
         {
-            const intensity = maximum > 0 ? magnitude[f][t] / maximum : 0;
-            c.fillStyle = `rgb(${Math.round(255 * intensity)},${Math.round(180 * intensity)},${Math.round(90 + 165 * intensity)})`;
-            c.fillRect(60 + t * width / times.length, 10 + (frequencies.length - 1 - f) * height / frequencies.length,
-                width / times.length + 1, height / frequencies.length + 1);
+            // 20 log10(amplitude / max), computed in log space to avoid underflow.
+            const db = maximum > 0 && magnitude[f][t] > 0
+                ? Math.max(-topDb, 20 * (Math.log10(magnitude[f][t]) - Math.log10(maximum))) : -topDb;
+            c.fillStyle = color((db + topDb) / topDb);
+            c.fillRect(x(timeEdges[t]), y(freqEdges[f + 1]),
+                x(timeEdges[t + 1]) - x(timeEdges[t]), y(freqEdges[f]) - y(freqEdges[f + 1]));
         }
     }
     c.fillStyle = '#eaf2f5';
-    c.font = '12px monospace';
-    c.fillText(`${frequencies.at(-1).toFixed(1)} Hz`, 0, 18);
-    c.fillText(`${frequencies[0].toFixed(1)} Hz`, 0, height + 10);
-    c.fillText(`${times[0].toFixed(3)}s`, 60, canvas.height - 22);
-    c.fillText(`${times.at(-1).toFixed(3)}s`, canvas.width - 65, canvas.height - 22);
-    c.fillText('Relative Time (s) / Frequency (Hz)', 60, canvas.height - 4);
+    c.font = '11px sans-serif';
+    const tickCount = width < 300 ? 2 : 4;
+    for (let i = 0; i <= tickCount; i++)
+    {
+        const fraction = i / tickCount;
+        const tx = p.l + fraction * width;
+        const fy = p.t + height - fraction * height;
+        const time = timeEdges[0] + fraction * (timeEdges.at(-1) - timeEdges[0]);
+        const frequency = freqEdges[0] + fraction * (freqEdges.at(-1) - freqEdges[0]);
+        c.strokeStyle = '#ffffff25';
+        c.beginPath(); c.moveTo(tx, p.t); c.lineTo(tx, p.t + height); c.stroke();
+        c.beginPath(); c.moveTo(p.l, fy); c.lineTo(p.l + width, fy); c.stroke();
+        c.textAlign = 'center';
+        c.fillText(time.toFixed(2), tx, p.t + height + 18);
+        c.textAlign = 'right';
+        c.fillText(frequency.toFixed(frequency < 10 ? 1 : 0), p.l - 6, fy + 4);
+    }
+    // Use exactly the same color mapping for the legend and heatmap.
+    const barX = p.l + width + 12;
+    for (let i = 0; i < 100; i++)
+    {
+        c.fillStyle = color(1 - i / 99);
+        c.fillRect(barX, p.t + i * height / 100, 12, height / 100 + 1);
+    }
+    c.fillStyle = '#eaf2f5';
+    c.textAlign = 'left';
+    c.fillText('강함', barX - 2, p.t - 10);
+    c.fillText('약함', barX - 2, p.t + height + 18);
+    for (const db of [0, -30, -60]) c.fillText(`${db}`, barX + 17, p.t + (-db / topDb) * height + 4);
+    c.font = 'bold 12px sans-serif';
+    c.fillText('주파수 (Hz)', 6, 16);
+    c.textAlign = 'center';
+    c.fillText('측정 구간 내부 시간 (초)', p.l + width / 2, p.t + height + 40);
+    c.fillText('상대 진폭 (dB)', w / 2, h - 36);
+    c.font = '11px sans-serif';
+    c.fillText(maximum > 0 ? '0 dB = 이 센서 Preview의 최대 진폭' : '진폭 모두 0 · 상대 dB 기준 없음', w / 2, h - 18);
+    c.textAlign = 'left';
 }
 
 addEventListener('resize', () =>
