@@ -263,7 +263,7 @@ function renderCanonical(data)
         drawSpectrogram($(sensor + 'Preview'), latest?.stft_preview?.[sensor]);
     }
     $('previewState').textContent = latest?.stft_preview
-        ? `측정 구간 Preview · SEQ ${latest.stft_preview_sequence_id} · 측정 ${receivedTimeText(latest.stft_preview_timestamp)} · ${latest.live_status === 'STALE' ? '과거 측정 · 센서 갱신 중지 — STALE' : 'Preview 측정 시각은 위 표시를 확인하세요'}`
+        ? `측정 구간 Preview · SEQ ${latest.stft_preview_sequence_id} · 측정 시각: ${receivedTimeText(latest.stft_preview_timestamp)} KST · ${latest.live_status === 'STALE' ? '과거 측정 · 센서 갱신 중지 — STALE' : 'Preview 측정 시각은 위 표시를 확인하세요'}`
         : 'STFT PREVIEW REQUIRED — 설정 또는 계산 데이터 대기';
 }
 
@@ -351,16 +351,32 @@ function drawSpectrogram(canvas, preview)
         const fraction = i / tickCount;
         const tx = p.l + fraction * width;
         const fy = p.t + height - fraction * height;
-        const time = timeEdges[0] + fraction * (timeEdges.at(-1) - timeEdges[0]);
         const frequency = freqEdges[0] + fraction * (freqEdges.at(-1) - freqEdges[0]);
         c.strokeStyle = '#ffffff25';
         c.beginPath(); c.moveTo(tx, p.t); c.lineTo(tx, p.t + height); c.stroke();
         c.beginPath(); c.moveTo(p.l, fy); c.lineTo(p.l + width, fy); c.stroke();
-        c.textAlign = 'center';
-        c.fillText(time.toFixed(2), tx, p.t + height + 18);
         c.textAlign = 'right';
         c.fillText(frequency.toFixed(frequency < 10 ? 1 : 0), p.l - 6, fy + 4);
     }
+    // Labels sit inside the plot on a translucent band. This is an overlay,
+    // not deletion or filtering of the low-frequency bins underneath.
+    const timeAxisTop = p.t + height - 48;
+    c.fillStyle = 'rgba(7,16,20,0.78)';
+    c.fillRect(p.l, timeAxisTop, width, 48);
+    c.fillStyle = '#ffffff';
+    c.font = 'bold 11px sans-serif';
+    const timeSpan = timeEdges.at(-1) - timeEdges[0];
+    const timePrecision = Math.min(6, Math.max(2, Math.ceil(-Math.log10(timeSpan / tickCount)) + 1));
+    for (let i = 0; i <= tickCount; i++)
+    {
+        const fraction = i / tickCount;
+        const time = timeEdges[0] + fraction * timeSpan;
+        c.textAlign = i === 0 ? 'left' : i === tickCount ? 'right' : 'center';
+        const tx = p.l + fraction * width + (i === 0 ? 5 : i === tickCount ? -5 : 0);
+        c.fillText(`${time.toFixed(timePrecision)}초`, tx, timeAxisTop + 18, width / (tickCount + 1) - 4);
+    }
+    c.textAlign = 'center';
+    c.fillText('구간 내 경과 시간(초)', p.l + width / 2, timeAxisTop + 39, width - 10);
     // Use exactly the same color mapping for the legend and heatmap.
     const barX = p.l + width + 12;
     for (let i = 0; i < 100; i++)
@@ -376,7 +392,6 @@ function drawSpectrogram(canvas, preview)
     c.font = 'bold 12px sans-serif';
     c.fillText('주파수 (Hz)', 6, 16);
     c.textAlign = 'center';
-    c.fillText('측정 구간 내부 시간 (초)', p.l + width / 2, p.t + height + 40);
     c.fillText('상대 진폭 (dB)', w / 2, h - 36);
     c.font = '11px sans-serif';
     c.fillText(maximum > 0 ? '0 dB = 이 센서 Preview의 최대 진폭' : '진폭 모두 0 · 상대 dB 기준 없음', w / 2, h - 18);
