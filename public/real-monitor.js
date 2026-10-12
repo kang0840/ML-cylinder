@@ -46,7 +46,7 @@ function updateConnectionStatus(measuredAt) {
   }
 }
 
-function draw(canvas, lines) {
+function draw(canvas, lines, axisLabel = '최근 패킷 순서') {
   const ratio = devicePixelRatio || 1;
   const w = canvas.clientWidth;
   const h = canvas.clientHeight;
@@ -54,17 +54,36 @@ function draw(canvas, lines) {
   canvas.height = h * ratio;
   const c = canvas.getContext('2d');
   c.scale(ratio, ratio);
-  const p = { l: 44, r: 14, t: 14, b: 24 };
+  const p = { l: Math.min(76, w * 0.25), r: 14, t: 28, b: 42 };
   const pw = w - p.l - p.r;
   const ph = h - p.t - p.b;
   const values = lines.flatMap(line => line.values).filter(Number.isFinite);
   let min = values.length ? Math.min(...values) : -1;
   let max = values.length ? Math.max(...values) : 1;
-  if (min === max) { min--; max++; }
+  if (min === max) { const margin = Math.max(Math.abs(min) * 0.1, 1); min -= margin; max += margin; }
+  const numberText = value => Math.abs(value) >= 10000 || (value !== 0 && Math.abs(value) < 0.01)
+    ? value.toExponential(1) : value.toFixed(2);
+  c.font = '11px sans-serif';
+  c.fillStyle = '#89a0aa';
+  c.textAlign = 'left';
+  c.fillText('RMS · 상대 PCM 진폭', p.l, 16);
   c.strokeStyle = '#203039';
   for (let i = 0; i < 5; i++) {
     const y = p.t + ph * i / 4;
     c.beginPath(); c.moveTo(p.l, y); c.lineTo(w - p.r, y); c.stroke();
+    c.textAlign = 'right';
+    c.fillText(numberText(max - (max - min) * i / 4), p.l - 6, y + 4);
+  }
+  c.textAlign = 'center';
+  c.fillText(axisLabel, p.l + pw / 2, h - 8);
+  const count = Math.max(0, ...lines.map(line => line.values.length));
+  c.textAlign = 'left';
+  if (count > 1) c.fillText('1', p.l, h - 25);
+  c.textAlign = 'right';
+  if (count > 1) c.fillText(String(count), w - p.r, h - 25);
+  if (!values.length) {
+    c.textAlign = 'center';
+    c.fillText('표시할 RMS 데이터 없음 · 센서 수신 대기', p.l + pw / 2, p.t + ph / 2, pw);
   }
   lines.forEach(line => {
     c.strokeStyle = line.color;
@@ -161,7 +180,9 @@ async function refresh() {
     draw($('sensorChart'), [
       { values: rows.map(row => row.vibration_rms == null ? NaN : Number(row.vibration_rms)), color: '#42c7ff' },
       { values: rows.map(row => row.sound_rms == null ? NaN : Number(row.sound_rms)), color: '#ffc04c' },
-    ]);
+    ], '저장된 Cycle 결과 순서');
+    setRmsResult('Cycle RMS 결과 · 재생', latest.vibration_rms, latest.sound_rms,
+      latest.measured_at, '저장된 Cycle 특징 · 파랑 SPH0645 / 노랑 INMP441');
     const sourceLabel = replayMode ? '재생 데이터' : '실시간 센서 데이터';
     $('note').textContent = `${sourceLabel} · 최근 ${rows.length}개 결과 · 마지막 측정 ${receivedTimeText(lastReceivedAt)} · RUL 상태: ${latest.rul_status || '수명 데이터 부족'}`;
   } catch (error) {
@@ -191,6 +212,15 @@ async function refresh() {
     refreshInFlight = false;
     refreshTimer = setTimeout(refresh, nextDelay);
   }
+}
+
+function setRmsResult(title, sph, inmp, timestamp, description)
+{
+    $('resultRmsTitle').textContent = title;
+    $('resultRmsDescription').textContent = description;
+    const format = value => Number.isFinite(value) ? value.toLocaleString('ko-KR', { maximumFractionDigits: 4 }) : '데이터 없음';
+    $('resultRmsValues').textContent = `SPH0645: ${format(sph)} / INMP441: ${format(inmp)}`;
+    $('resultRmsTime').textContent = timestamp ? `측정: ${receivedTimeText(timestamp)} KST` : '측정 시각 없음';
 }
 
 function renderCanonical(data)
@@ -249,12 +279,18 @@ function renderCanonical(data)
         { values: packetSeries('sph0645'), color: '#42c7ff' },
         { values: packetSeries('inmp441'), color: '#ffc04c' },
     ]);
-    // A Cycle feature is not a feature for every Raw packet. Show one real
-    // Cycle point rather than repeating it along the Raw message history.
+    const hasCycle = Number.isFinite(latest?.vibration_rms) || Number.isFinite(latest?.sound_rms);
+    // Raw packet RMS is already calculated by Pi; never label it as a Cycle feature.
+    setRmsResult(hasCycle ? 'Cycle RMS 결과' : 'Raw 패킷 RMS 결과 · Cycle 검출 전',
+        hasCycle ? latest?.vibration_rms : latest?.packet_metrics?.sph0645?.rms,
+        hasCycle ? latest?.sound_rms : latest?.packet_metrics?.inmp441?.rms,
+        hasCycle ? latest?.feature_timestamp : latest?.timestamp,
+        hasCycle ? '실제 검출된 Cycle 특징 · 파랑 SPH0645 / 노랑 INMP441'
+            : 'Raw 패킷별 평균 제거 RMS · 파랑 SPH0645 / 노랑 INMP441 · 상대 PCM 진폭. 누락은 연결하지 않으며 연속 음향 시간이나 누설량을 뜻하지 않습니다.');
     draw($('sensorChart'), [
-        { values: Number.isFinite(latest?.vibration_rms) ? [latest.vibration_rms] : [], color: '#42c7ff' },
-        { values: Number.isFinite(latest?.sound_rms) ? [latest.sound_rms] : [], color: '#ffc04c' },
-    ]);
+        { values: hasCycle ? (Number.isFinite(latest?.vibration_rms) ? [latest.vibration_rms] : []) : packetSeries('sph0645'), color: '#42c7ff' },
+        { values: hasCycle ? (Number.isFinite(latest?.sound_rms) ? [latest.sound_rms] : []) : packetSeries('inmp441'), color: '#ffc04c' },
+    ], hasCycle ? '최근 검출 Cycle 1건' : '최근 패킷 순서 · 누락 포함');
     $('note').textContent = latest
         ? `${data.cylinder_id} · 측정 ${receivedTimeText(latest.timestamp)} · Pi 수신 ${receivedTimeText(lastReceivedAt)} · Feature ${latest.feature_timestamp ? receivedTimeText(latest.feature_timestamp) : 'WAITING FOR OPERATION'} · Preview SEQ ${latest.stft_preview_sequence_id ?? '--'} · Preview는 분석/학습 입력이 아닙니다`
         : 'NO LIVE DATA — 센서 데이터 또는 장치 설정을 기다립니다';
