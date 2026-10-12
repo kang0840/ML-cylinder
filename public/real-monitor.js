@@ -177,7 +177,7 @@ async function refresh() {
       : `${Number(latest.remaining_life_percent).toFixed(1)}%`;
     $('sensorRms').textContent = '재생 — 패킷 RMS 없음';
     $('lastReceive').textContent = receivedTimeText(lastReceivedAt);
-    draw($('sensorChart'), [
+    draw($('packetChart'), [
       { values: rows.map(row => row.vibration_rms == null ? NaN : Number(row.vibration_rms)), color: '#42c7ff' },
       { values: rows.map(row => row.sound_rms == null ? NaN : Number(row.sound_rms)), color: '#ffc04c' },
     ], '저장된 Cycle 결과 순서');
@@ -279,18 +279,10 @@ function renderCanonical(data)
         { values: packetSeries('sph0645'), color: '#42c7ff' },
         { values: packetSeries('inmp441'), color: '#ffc04c' },
     ]);
-    const hasCycle = Number.isFinite(latest?.vibration_rms) || Number.isFinite(latest?.sound_rms);
-    // Raw packet RMS is already calculated by Pi; never label it as a Cycle feature.
-    setRmsResult(hasCycle ? 'Cycle RMS 결과' : 'Raw 패킷 RMS 결과 · Cycle 검출 전',
-        hasCycle ? latest?.vibration_rms : latest?.packet_metrics?.sph0645?.rms,
-        hasCycle ? latest?.sound_rms : latest?.packet_metrics?.inmp441?.rms,
-        hasCycle ? latest?.feature_timestamp : latest?.timestamp,
-        hasCycle ? '실제 검출된 Cycle 특징 · 파랑 SPH0645 / 노랑 INMP441'
-            : 'Raw 패킷별 평균 제거 RMS · 파랑 SPH0645 / 노랑 INMP441 · 상대 PCM 진폭. 누락은 연결하지 않으며 연속 음향 시간이나 누설량을 뜻하지 않습니다.');
-    draw($('sensorChart'), [
-        { values: hasCycle ? (Number.isFinite(latest?.vibration_rms) ? [latest.vibration_rms] : []) : packetSeries('sph0645'), color: '#42c7ff' },
-        { values: hasCycle ? (Number.isFinite(latest?.sound_rms) ? [latest.sound_rms] : []) : packetSeries('inmp441'), color: '#ffc04c' },
-    ], hasCycle ? '최근 검출 Cycle 1건' : '최근 패킷 순서 · 누락 포함');
+    setRmsResult('실시간 패킷 RMS 변화',
+        latest?.packet_metrics?.sph0645?.rms, latest?.packet_metrics?.inmp441?.rms,
+        latest?.timestamp,
+        '센서별 평균 제거 후 상대 PCM 진폭 · 파랑 SPH0645 / 노랑 INMP441 · 가로축은 최근 패킷 순서입니다. 누락 구간은 연결하지 않습니다. 연속 음향 시간이나 Cycle·수명 판정이 아닙니다.');
     $('note').textContent = latest
         ? `${data.cylinder_id} · 측정 ${receivedTimeText(latest.timestamp)} · Pi 수신 ${receivedTimeText(lastReceivedAt)} · Feature ${latest.feature_timestamp ? receivedTimeText(latest.feature_timestamp) : 'WAITING FOR OPERATION'} · Preview SEQ ${latest.stft_preview_sequence_id ?? '--'} · Preview는 분석/학습 입력이 아닙니다`
         : 'NO LIVE DATA — 센서 데이터 또는 장치 설정을 기다립니다';
