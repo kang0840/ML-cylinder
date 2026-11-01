@@ -138,7 +138,7 @@ async function refresh() {
   refreshInFlight = true;
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
-  let nextDelay = 2000;
+  let nextDelay = replayMode ? 2000 : 500;
   try {
     const response = await fetch(
       `${API_ROOT}/api/real-cylinder?limit=100&source=${dataSource}`
