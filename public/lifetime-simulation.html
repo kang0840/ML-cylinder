@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="ko"><head><script>location.replace("lifetime-condition.html" + location.search);</script><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>가상 수명 분석 · 스마트 실린더</title>
+<style>*{box-sizing:border-box}body{margin:0;background:#071014;color:#eaf2f5;font:16px/1.65 Arial,sans-serif}main{max-width:1100px;margin:auto;padding:28px}a{color:#42c7ff}.banner{background:#392b12;border:1px solid #ffc04c;padding:20px;border-radius:14px}.card{background:#101b21;border:1px solid #263943;border-radius:14px;padding:22px;margin:18px 0}.grid{display:grid;grid-template-columns:repeat(3,1fr);gap:16px}.value{font-size:30px;color:#42c7ff;display:block}label{display:block;margin:14px 0}input,select,button{font:inherit;padding:8px;background:#192b34;color:#fff;border:1px solid #536c78;border-radius:6px}input{max-width:100%}button{cursor:pointer}canvas{width:100%;height:260px}small,.muted{color:#b0c3cc}h1{margin-bottom:8px}table{width:100%;border-collapse:collapse}td,th{text-align:left;padding:9px;border-bottom:1px solid #263943}@media(max-width:700px){.grid{grid-template-columns:1fr}main{padding:16px}.value{font-size:26px}}</style><style id="lifetimeOverviewStyle">
+#lifetimeDetailResult .lifetime-panel{padding:28px;background:linear-gradient(130deg,#11232c,#101b21 70%)}
+#lifetimeDetailResult h2{margin:0 0 26px;font-size:22px}
+.lifetime-caption{display:block;color:#a6bdc8;font-size:14px}
+.lifetime-hero{display:flex;flex-direction:column;gap:10px;padding:8px 0 28px}
+.lifetime-number{color:#65d4ff;font-size:clamp(42px,7vw,76px);line-height:1.1;letter-spacing:-2px}
+.lifetime-number span{font-size:.52em;letter-spacing:0;margin-left:8px}
+.lifetime-stats{display:grid;grid-template-columns:1fr 1fr;gap:20px;border-top:1px solid #2a424e;border-bottom:1px solid #2a424e;padding:24px 0}
+.lifetime-stats>div{display:flex;flex-direction:column;gap:9px}.lifetime-stats strong{font-size:26px}
+.lifetime-evidence{display:flex;flex-wrap:wrap;gap:10px 18px;align-items:center;padding:22px 0;color:#9bb3bf;font-size:13px}.lifetime-evidence strong{color:#d3e3ea;font-weight:500}
+.lifetime-footer{display:flex;gap:20px;justify-content:space-between;align-items:center;background:#0c171d;padding:18px;border-radius:10px}
+.lifetime-badge{display:inline-block;color:#ffd68b;background:#3a2d18;border:1px solid #69502a;border-radius:20px;padding:5px 10px;font-size:12px}
+.lifetime-footer p{font-size:12px;line-height:1.8;color:#a6bdc8;margin:10px 0 0}#lifetimeDetailResult #lifetimeDetails{white-space:nowrap;margin:0}
+@media(max-width:600px){#lifetimeDetailResult .lifetime-panel{padding:20px}.lifetime-stats{grid-template-columns:1fr;gap:24px}.lifetime-footer{align-items:flex-start;flex-direction:column}.lifetime-evidence{flex-direction:column;align-items:flex-start}.lifetime-stats strong{font-size:23px}}
+</style></head>
+<body><main><a id="backToMonitor" href="monitoring.html">← 모니터링으로 돌아가기</a><h1>소리와 사용량으로 살펴보는 수명</h1><p>STFT로 소리를 살펴보고, Weibull-AFT로 앞으로의 사용 횟수를 계산해요.</p><p class="muted">예시 자료: SMC CD85N25-25-B · 1번 실린더에서 녹음한 정상 소리</p>
+<div class="banner"><strong>가상 시나리오 · 실제 수명 예측이 아닙니다.</strong><br>직접 녹음한 소리를 사용했어요. 사용 횟수와 고장 기록은 가정한 값이에요. 아래 숫자는 조건을 바꿔 보는 예시이며, 현재 보고 있는 장치의 실제 남은 수명은 아닙니다.</div>
+<section class="charts" id="lifetimeDetailResult" aria-labelledby="lifetimeResultTitle">
+<article class="card lifetime-panel">
+<h2 id="lifetimeResultTitle">소리로 살펴보는 실린더 수명</h2>
+<div class="lifetime-hero"><span class="lifetime-caption">기본 조건의 모의 평균 잔여 횟수</span><strong class="lifetime-number">약 11.5<span>만 회</span></strong><span class="muted">기본 가정: 누적 50,000회 · 정상 소리 대표 특징</span></div>
+<div class="lifetime-stats">
+<div><span class="lifetime-caption">가정한 사용량</span><strong>5만 회</strong><span class="muted">50,000회</span></div>
+<div><span class="lifetime-caption">모의 평균 총수명</span><strong>약 16.5만 회</strong><span class="muted">165,069회 · 사용량 + 잔여 횟수</span></div>
+</div>
+<div class="lifetime-evidence"><span>분석 근거</span><strong>실제 소리 537개 구간 · 34.4초</strong><span>STFT + Weibull-AFT · 1번 실린더 정상 녹음</span></div>
+<div class="lifetime-footer"><div><span class="lifetime-badge">실제 소리 + 가상 사용 조건</span><p>사용량·고장 기록·소리와 수명의 관계를 가정한 예시입니다.<br>현재 보고 있는 장치의 실시간 수명이나 교체 시기를 뜻하지 않습니다.</p></div><a class="nav" id="lifetimeResultAnchor" href="#age">조건 바꾸기 ↓</a></div>
+</article></section><section class="card"><h2>얼마나 사용했다고 가정할까요?</h2><label>누적 왕복 횟수 (가정) <input id="age" type="number" min="0" max="100000" step="1000" value="50000"> 회</label><small>모의 학습 범위: 0~100,000회. 센서 패킷 수를 왕복 횟수로 세지 않습니다.</small><label>녹음한 소리 선택 <select id="packet"><option value="reference">정상 소리의 대표 특징</option></select></label><p id="feature" class="muted"></p><p id="error" role="alert"></p></section>
+<section class="grid" aria-label="가상 수명 결과"><article class="card"><span>처음부터 예상한 전체 사용 횟수</span><strong id="total" class="value">계산 준비 중</strong><small>가정한 누적 사용량 + 앞으로 더 사용할 횟수 · 평균</small></article><article class="card"><span>앞으로 더 사용할 횟수 · 평균</span><strong id="remaining" class="value">계산 준비 중</strong><small>가정한 현재 시점부터의 분포 평균</small></article><article class="card"><span>절반이 고장에 도달하는 횟수</span><strong id="median" class="value">계산 준비 중</strong><small>가상 개체 절반이 고장에 도달하는 횟수</small></article></section>
+<section class="card"><h2>더 사용하면 어떻게 달라질까요?</h2><p class="muted">가로는 앞으로 더 사용하는 횟수, 세로는 가상 실린더가 고장 없이 남아 있는 비율이에요.</p><canvas id="survival" aria-label="가상 생존 확률 곡선"></canvas></section>
+<section class="card"><h2>어떤 자료를 사용했나요?</h2><p><strong>직접 측정:</strong> 1번 실린더의 정상 소리 537개 구간을 분석했어요.<br><strong>가정한 값:</strong> 사용량과 고장 기록, 소리가 수명에 미치는 관계를 설정했어요.</p><details><summary>계산 방법과 가정 자세히 보기</summary><table><thead><tr><th>구분</th><th>내용</th></tr></thead><tbody><tr><td>실제 측정</td><td>정상 1세션 537패킷, 센서별 저장 음향 34.368초. INMP441 STFT 창 RMS를 패킷별 평균한 특징.</td></tr><tr><td>가상 자료</td><td>실제 특징을 재사용한 가상 개체 80개. 독립적인 실제 실린더 80개가 아닙니다.</td></tr><tr><td>가정한 관계</td><td>표준화 소리 특징이 1 증가할 때 잔여수명 척도 ×exp(−0.25), 누적 사용 10만 회 증가 시 ×exp(−0.35). 실측으로 확인한 관계가 아닙니다.</td></tr><tr><td>기준값</td><td>다른 실린더의 논문 고장 기록 5개를 재계산한 평균 약 135,360회를 모의 생성 기준으로 사용. 해당 논문에는 우리 STFT 특징이 없습니다.</td></tr><tr><td>모델</td><td>가상 고장·관찰 종료 자료로 최대우도 Weibull-AFT 적합. 단위는 왕복 횟수, 예측 기준점은 가정한 현재 시점.</td></tr></tbody></table></details><p id="fitInfo" class="muted"></p><a href="https://www.tribology.rs/journals/2025/2025-1/15-1831.pdf" target="_blank" rel="noopener">기준 문헌 보기</a> · <button id="download" type="button">가정·결과 JSON 다운로드</button><p>실제 수명 데이터로 검증하지 않았으므로 정확도·오차범위·장비별 잔여수명 비율은 표시하지 않습니다. 이 화면은 DB에 결과를 저장하거나 MQTT 신호를 보내지 않습니다.</p></section>
+</main><script src="lifetime-simulation-data.js"></script><script>
+'use strict';
+const serial = new URLSearchParams(window.location.search).get('serial');
+if (serial)
+{
+ document.getElementById('backToMonitor').href = 'monitoring.html?serial=' + encodeURIComponent(serial);
+}
+const data=window.LIFETIME_SIMULATION;
+const $=id=>document.getElementById(id);
+let current=null;
+function evaluate(age,z){
+ if(!Number.isFinite(age)||age<0||age>100000||!Number.isFinite(z))throw Error('가정한 누적 횟수는 0~100,000 범위의 숫자로 입력하세요.');
+ const b=data.fitted_beta,scale=Math.exp(b[0]+b[1]*z+b[2]*age/100000);
+ const mean=scale*data.gamma_mean_factor;
+ return {status:'SIMULATION_ONLY',assumed_age_cycles:age,measured_stft_z:z,mean_remaining_cycles:mean,mean_total_cycles:age+mean,median_remaining_cycles:scale*Math.pow(Math.log(2),1/data.fitted_shape),scale};
+}
+function plot(scale){const c=$('survival'),dpr=window.devicePixelRatio||1,w=Math.max(300,c.clientWidth),h=260;c.width=w*dpr;c.height=h*dpr;const ctx=c.getContext('2d');ctx.scale(dpr,dpr);ctx.clearRect(0,0,w,h);const left=55,right=w-20,top=15,bottom=210,max=scale*Math.pow(-Math.log(.01),1/data.fitted_shape);ctx.font='12px Arial';ctx.fillStyle='#b0c3cc';ctx.strokeStyle='#30434d';for(let i=0;i<=4;i++){let y=top+(bottom-top)*i/4;ctx.beginPath();ctx.moveTo(left,y);ctx.lineTo(right,y);ctx.stroke();ctx.fillText((100-i*25)+'%',5,y+4);let x=left+(right-left)*i/4;ctx.fillText(Math.round(max*i/4).toLocaleString(),x-18,bottom+22);}ctx.fillText('추가 왕복 횟수 (가상)',left,bottom+45);ctx.strokeStyle='#42c7ff';ctx.lineWidth=3;ctx.beginPath();for(let i=0;i<=200;i++){const t=max*i/200,p=Math.exp(-Math.pow(t/scale,data.fitted_shape)),x=left+(right-left)*i/200,y=bottom-(bottom-top)*p;i?ctx.lineTo(x,y):ctx.moveTo(x,y);}ctx.stroke();}
+function update(){try{if($('age').value.trim()==='')throw Error('가정한 누적 횟수를 입력하세요.');const selected=$('packet').value;const p=selected==='reference'?null:data.packets.find(p=>String(p.sequence)===selected);current=evaluate(Number($('age').value),p?p.z:0);$('error').textContent='';for(const [id,key]of [['total','mean_total_cycles'],['remaining','mean_remaining_cycles'],['median','median_remaining_cycles']])$(id).textContent=Math.round(current[key]).toLocaleString()+'회';$('feature').textContent=p?'저장 패킷 '+p.sequence+' · STFT 창 RMS 평균 '+p.rms.toFixed(2)+' PCM · 표준화 특징 '+p.z.toFixed(3):'직접 녹음한 정상 소리 전체를 대표하는 특징을 사용하고 있어요.';plot(current.scale);}catch(e){current=null;$('error').textContent=e.message;for(const id of ['total','remaining','median'])$(id).textContent='입력 확인';const c=$('survival');c.getContext('2d').clearRect(0,0,c.width,c.height);}}
+if(!data||data.status!=='SIMULATION_ONLY'){$('error').textContent='모의 분석 자료를 불러오지 못했습니다. 설치 파일을 확인하세요.';}else{for(const p of data.packets){const o=document.createElement('option');o.value=p.sequence;o.textContent='녹음 구간 '+p.sequence;$('packet').appendChild(o);}$('fitInfo').textContent='가상 실린더 80개를 설정한 계산 예시예요. 실제 장비의 수명과 비교해 검증한 결과는 아닙니다.';$('age').addEventListener('input',update);$('packet').addEventListener('change',update);window.addEventListener('resize',update);$('download').addEventListener('click',()=>{if(!current)return;const blob=new Blob([JSON.stringify({disclosure:'실제 STFT + 가상 사용량/수명 관계. 실제 장비 수명 예측 아님.',scenario:current,model:data},null,2)],{type:'application/json'}),url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download='SIMULATION_ONLY-lifetime.json';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);});update();}
+</script></body></html>
