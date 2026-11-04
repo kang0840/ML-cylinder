@@ -15,6 +15,7 @@ class ConditionScenarioTests(unittest.TestCase):
     def test_video_period_applies_only_to_confirmed_interval_not_lifetime(self):
         from copy import deepcopy
         data=json.loads((ROOT/'public/lifetime-condition-snapshot.js').read_text(encoding='utf-8').split('=',1)[1].strip().rstrip(';'))
+        data=data.get('picos',{}).get('cylinder_05',data)
         result=model.apply_video_period(deepcopy(data))['video_usage']
         self.assertEqual(result['status'],'VIDEO_PERIOD_INTERVAL_ESTIMATE')
         self.assertAlmostEqual(result['estimated_interval_cycles'],1011.437089/2.6016069444444443,places=6)
@@ -115,8 +116,77 @@ console.log('PASS snapshot counts, scenario updates, observed time conversion, i
         self.assertNotIn("'lifetime-simulation.html?serial='",monitor)
         snapshot=(ROOT/'public/lifetime-condition-snapshot.js').read_text(encoding='utf-8')
         data=json.loads(snapshot.split('=',1)[1].strip().rstrip(';'))
+        data=data.get('picos',{}).get('cylinder_05',data)
         self.assertIsNone(data['default_assumptions']['age_cycles'])
         self.assertIsNone(data['default_result'])
+
+
+class PerPicoDatabaseTests(unittest.TestCase):
+    def test_separate_read_only_archives_and_independent_missing_data(self):
+        import base64,sqlite3,struct,tempfile
+        from uuid import UUID
+        from datetime import datetime,timedelta,timezone
+        with tempfile.TemporaryDirectory(dir=ROOT/'outputs') as folder:
+            self.assertTrue(Path(folder).resolve().is_relative_to((ROOT/'outputs').resolve()))
+            for number in range(1,7):
+                cylinder='cylinder_%02d'%number
+                db=sqlite3.connect(Path(folder)/('pico%02d-analysis.sqlite3'%number))
+                db.executescript('CREATE TABLE identity(key TEXT PRIMARY KEY,value TEXT);CREATE TABLE sessions(session_id TEXT PRIMARY KEY,document TEXT);CREATE TABLE raw_data(id INTEGER PRIMARY KEY,session_id TEXT,sequence_id INTEGER,document TEXT);')
+                db.execute('INSERT INTO identity VALUES (?,?)',('cylinder_id',cylinder))
+                if number in (1,5):
+                    session=str(UUID(int=number));stamp=datetime(2026,11,4,tzinfo=timezone(timedelta(hours=9)))
+                    meta=dict(session_id=session,cylinder_id=cylinder,physical_cylinder_id='CYL-%03d'%number,
+                              ground_truth='NORMAL',collection_mode='TRAINING',dataset_role='BASELINE',
+                              experiment_id='normal_%02d'%number,test_conditions={},started_at=stamp.isoformat())
+                    db.execute('INSERT INTO sessions VALUES (?,?)',(session,json.dumps(meta)))
+                    for sequence in range(1,4):
+                        payload=dict(cylinder_id=cylinder,session_id=session,sequence_id=sequence,
+                                     timestamp=(stamp+timedelta(seconds=sequence)).isoformat(),
+                                     runtime={'last_received_at':(stamp+timedelta(seconds=sequence)).isoformat()})
+                        for sensor,rate,count in [('sph0645',4000,256),('inmp441',16000,1024)]:
+                            frequency=250 if number==1 else 500
+                            samples=[round((100+sequence*30)*math.sin(2*math.pi*frequency*i/rate)) for i in range(count)]
+                            payload[sensor]=dict(sample_rate=rate,sample_count=count,sample_format='s32le',encoding='base64',data=base64.b64encode(struct.pack('<%di'%count,*samples)).decode())
+                        row=dict(id=sequence,cylinder_id=cylinder,session_id=session,sequence_id=sequence,raw_payload=payload)
+                        db.execute('INSERT INTO raw_data VALUES (?,?,?,?)',(sequence,session,sequence,json.dumps(row)))
+                db.commit();db.close()
+            result=model.analyze_picos(Path(folder),progress=lambda *a,**k:None)
+            self.assertEqual(result['calculated_picos'],['cylinder_01','cylinder_05'])
+            for cylinder,expected in [('cylinder_01',250),('cylinder_05',500)]:
+                data=result['picos'][cylinder]
+                self.assertEqual(data['source_file'],'pico'+cylinder[-2:]+'-analysis.sqlite3')
+                self.assertEqual(data['normal_packets'],3)
+                self.assertEqual(data['default_assumptions']['feature'],'NORMAL')
+                spectrum=data['spectra']['inmp441'];peak=max(range(len(spectrum['normal_mean_log1p'])),key=lambda i:spectrum['normal_mean_log1p'][i])
+                self.assertEqual(spectrum['frequency_hz'][peak],expected)
+            self.assertEqual(result['picos']['cylinder_02']['reason'],'NORMAL_BASELINE_REQUIRED')
+            client=model.PicoSQLiteClient(Path(folder),'cylinder_01')
+            with self.assertRaises(sqlite3.OperationalError):client.db.execute('DELETE FROM raw_data')
+            writer=sqlite3.connect(Path(folder)/'pico01-analysis.sqlite3')
+            old=writer.execute('SELECT document FROM raw_data WHERE id=3').fetchone()[0]
+            new=json.loads(old);new['id']=4;new['sequence_id']=4
+            writer.execute('INSERT INTO raw_data VALUES (?,?,?,?)',(4,new['session_id'],4,json.dumps(new)));writer.commit()
+            self.assertEqual(len(client.table('raw_data').select('*').order('id').execute().data),3)
+            writer.execute('DELETE FROM raw_data WHERE id=1');writer.commit()
+            with self.assertRaises(ValueError):client.verify_source()
+            writer.close();client.close()
+
+    def test_browser_switch_clears_other_pico_usage_and_results(self):
+        code=r'''
+const fs=require('fs'),vm=require('vm'),assert=require('assert'),root=process.argv[1],els=new Map();
+function el(id){if(!els.has(id))els.set(id,{value:'',textContent:'',children:[],listeners:{},clientWidth:800,width:800,height:280,addEventListener(k,f){this.listeners[k]=f},appendChild(x){this.children.push(x)},getContext(){return new Proxy({},{get:()=>()=>{}})}});return els.get(id)}
+const c={Math,Number,Array,Object,Error,Date,URLSearchParams,location:{search:'?pico=cylinder_05'},setTimeout(){},document:{getElementById:el,createElement:()=>({appendChild(){}}),querySelectorAll:()=>['pico','ageMode','priorMeasuredCycles','age','sensor','influence','parameterMode','failures','feature'].map(el)}};c.window=c;c.devicePixelRatio=1;c.addEventListener=()=>{};vm.createContext(c);
+vm.runInContext(fs.readFileSync(root+'/public/lifetime-condition-math.js','utf8'),c);vm.runInContext(fs.readFileSync(root+'/public/lifetime-condition-snapshot.js','utf8'),c);
+const five=c.LIFETIME_CONDITION_SNAPSHOT.picos?.cylinder_05||c.LIFETIME_CONDITION_SNAPSHOT,one=JSON.parse(JSON.stringify(five));one.cylinder_id='cylinder_01';delete one.video_usage;one.default_assumptions.feature='NORMAL';
+c.LIFETIME_CONDITION_SNAPSHOT={status:'PICO_ANALYSIS_COLLECTION',default_cylinder:'cylinder_05',picos:{cylinder_01:one,cylinder_05:five,cylinder_02:{status:'DATA_REQUIRED',cylinder_id:'cylinder_02',message:'정상 기준 필요',source_inventory:{raw_packets:0},generated_at:five.generated_at}}};
+el('sensor').value='inmp441';el('parameterMode').value='fit';el('influence').value='.25';vm.runInContext(fs.readFileSync(root+'/public/lifetime-condition-ui.js','utf8'),c);
+el('priorMeasuredCycles').value='100';el('priorMeasuredCycles').listeners.change();assert.equal(el('error').textContent,'');
+el('pico').value='cylinder_01';el('pico').listeners.change();assert(el('source').textContent.includes('cylinder_01'));assert.equal(el('priorMeasuredCycles').value,'');assert.equal(el('ageMode').value,'manual');assert.equal(el('mean').textContent,'입력 확인');
+el('pico').value='cylinder_02';el('pico').listeners.change();assert(el('analysisContent').hidden);assert(el('picoState').textContent.includes('정상 기준'));assert.equal(el('mean').textContent,'입력 확인');
+el('pico').value='cylinder_05';el('pico').listeners.change();assert(!el('analysisContent').hidden);assert.equal(el('priorMeasuredCycles').value,'');assert(el('videoUsage').textContent.includes('388.8'));console.log('PICO_SWITCH_PASS');
+'''
+        completed=subprocess.run(['node','-e',code,str(ROOT)],capture_output=True,text=True)
+        self.assertEqual(completed.returncode,0,completed.stdout+completed.stderr)
 
 
 if __name__=='__main__':unittest.main()

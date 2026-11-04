@@ -9,6 +9,94 @@ import json
 import math
 from pathlib import Path
 import runpy
+import sqlite3
+from types import SimpleNamespace
+
+PICOS = tuple('cylinder_%02d' % n for n in range(1, 7))
+
+
+class PicoSQLiteClient:
+    """Read one device archive, bounded at its starting Raw ID; no write lock."""
+    def __init__(self, directory, cylinder):
+        if cylinder not in PICOS:
+            raise ValueError('Unknown Pico')
+        self.path = Path(directory) / ('pico' + cylinder[-2:] + '-analysis.sqlite3')
+        self.db = sqlite3.connect(self.path.resolve().as_uri() + '?mode=ro', uri=True, isolation_level=None)
+        identity = dict(self.db.execute('SELECT key,value FROM identity'))
+        if identity.get('cylinder_id') != cylinder:
+            self.db.close()
+            raise ValueError('Archive identity mismatch')
+        self.cylinder = cylinder
+        self.highwater = self.db.execute('SELECT coalesce(max(id),0) FROM raw_data').fetchone()[0]
+        self.start_count = self.db.execute('SELECT count(*) FROM raw_data WHERE id<=?', (self.highwater,)).fetchone()[0]
+
+    def inventory(self):
+        rows = self.db.execute("SELECT json_extract(s.document,'$.ground_truth'), "
+            "json_extract(s.document,'$.collection_mode'),count(*),count(distinct r.session_id) "
+            "FROM raw_data r JOIN sessions s ON s.session_id=r.session_id WHERE r.id<=? GROUP BY 1,2",
+            (self.highwater,)).fetchall()
+        return dict(raw_packets=sum(r[2] for r in rows), source_highwater_id=self.highwater,
+                    groups=[dict(ground_truth=label,collection_mode=mode,packets=count,sessions=sessions)
+                            for label,mode,count,sessions in rows])
+
+    def verify_source(self):
+        count = self.db.execute('SELECT count(*) FROM raw_data WHERE id<=?', (self.highwater,)).fetchone()[0]
+        if count != self.start_count:
+            raise ValueError('Source changed during analysis; retry')
+
+    def close(self):
+        self.db.close()
+
+    def table(self, name):
+        if name not in ('collection_sessions', 'raw_data'):
+            raise ValueError('Read-only analysis table')
+        owner = self
+
+        class Query:
+            def __init__(self):
+                self.filters, self.ordering, self.maximum = [], ('id', False), None
+                self.columns = None
+
+            def select(self, columns):
+                self.columns = None if columns == '*' else [part.strip() for part in columns.split(',')]
+                if self.columns and any(not name.isidentifier() for name in self.columns):
+                    raise ValueError('Unsupported projection')
+                return self
+            def eq(self, key, value): self.filters.append((key, '=', [value])); return self
+            def gt(self, key, value): self.filters.append((key, '>', [value])); return self
+            def in_(self, key, values): self.filters.append((key, 'IN', list(values))); return self
+            def order(self, key, desc=False): self.ordering = (key, desc); return self
+            def limit(self, value): self.maximum = value; return self
+
+            def execute(self):
+                allowed = {'id','session_id','cylinder_id','collection_mode','ground_truth','created_at','started_at'}
+                def column(key):
+                    if key not in allowed: raise ValueError('Unsupported read column')
+                    if key == 'id' and name == 'raw_data': return 't.id'
+                    if key == 'session_id': return 't.session_id'
+                    return "json_extract(t.document,'$." + key + "')"
+                params, terms = [], []
+                if name == 'raw_data':
+                    terms.append('t.id<=?'); params.append(owner.highwater)
+                else:
+                    terms.append('EXISTS(SELECT 1 FROM raw_data r WHERE r.session_id=t.session_id AND r.id<=?)')
+                    params.append(owner.highwater)
+                for key, operator, values in self.filters:
+                    if operator == 'IN':
+                        terms.append(column(key) + ' IN (' + ','.join('?' for _ in values) + ')' if values else '0')
+                    else: terms.append(column(key) + operator + '?')
+                    params.extend(values)
+                key, desc = self.ordering
+                if name == 'collection_sessions' and key == 'id': key = 'session_id'
+                sql = 'SELECT t.document FROM ' + ('sessions' if name == 'collection_sessions' else 'raw_data')
+                sql += ' t WHERE ' + ' AND '.join(terms) + ' ORDER BY ' + column(key) + (' DESC' if desc else ' ASC')
+                if self.maximum is not None:
+                    sql += ' LIMIT ?'; params.append(self.maximum)
+                rows = [json.loads(row[0]) for row in owner.db.execute(sql, params).fetchall()]
+                if self.columns is not None:
+                    rows = [{key: row.get(key) for key in self.columns} for row in rows]
+                return SimpleNamespace(data=rows)
+        return Query()
 
 VERSION = 'measured_stft_conditional_weibull_scenario_v1'
 PAPER_FAILURES = [95000, 125997, 141000, 150000, 162000]
@@ -164,7 +252,7 @@ def query_sessions(client, cylinder):
     return client.table('collection_sessions').select(
         'session_id,cylinder_id,physical_cylinder_id,experiment_id,ground_truth,dataset_role,test_conditions'
     ).eq('cylinder_id',cylinder).eq('collection_mode','TRAINING').in_(
-        'ground_truth',['NORMAL','SEAL_LEAK']).order('created_at').execute().data
+        'ground_truth',['NORMAL','SEAL_LEAK']).order('started_at').execute().data
 
 
 def build_snapshot(client, cylinder, progress=print, operation_since=None):
@@ -172,6 +260,7 @@ def build_snapshot(client, cylinder, progress=print, operation_since=None):
     from system.MQTT.message_parser import parse_payload
     from system.ML.Condition.analysis import make_packet_stft_rows
     sessions=query_sessions(client,cylinder)
+    if any(s['cylinder_id'] != cylinder for s in sessions): raise ValueError('Mixed Pico sessions')
     normal=[s for s in sessions if s['ground_truth']=='NORMAL' and s['dataset_role'] in ('BASELINE','UNASSIGNED')]
     if not normal: raise ValueError('NORMAL baseline required')
     identity={s['physical_cylinder_id'] for s in normal}
@@ -192,7 +281,7 @@ def build_snapshot(client, cylinder, progress=print, operation_since=None):
         cursor=0;seen=set();times=[];first_index=len(records)
         while True:
             page=client.table('raw_data').select('id,cylinder_id,session_id,sequence_id,raw_payload').eq(
-                'session_id',s['session_id']).gt('id',cursor).order('id').limit(64).execute().data
+                'session_id',s['session_id']).eq('cylinder_id',cylinder).gt('id',cursor).order('id').limit(64).execute().data
             if not page: break
             for row in page:
                 if row['sequence_id'] in seen: raise ValueError('Duplicate packet')
@@ -261,7 +350,7 @@ def build_snapshot(client, cylinder, progress=print, operation_since=None):
                   baseline_scope='NORMAL BASELINE/UNASSIGNED only; no leakage labels used to fit baseline',
                   default_failures=PAPER_FAILURES,paper_author_reported_mean=167500,
                   reference_url='https://www.tribology.rs/journals/2025/2025-1/15-1831.pdf',
-                  default_assumptions=dict(age_cycles=None,sound_influence=.25,feature='OPERATION' if operation_since else 'SEAL_LEAK'),
+                  default_assumptions=dict(age_cycles=None,sound_influence=.25,feature='OPERATION' if operation_since else ('SEAL_LEAK' if any(c['key']=='SEAL_LEAK' for c in candidates) else 'NORMAL')),
                   operation=dict(confirmed_stops=confirmed,observed_operation_seconds=operating,
                                  excluded_stop_gap_seconds=wall-operating if confirmed else None,
                                  cycle_period_seconds=None,actual_mechanical_cycles=None),
@@ -291,20 +380,81 @@ def atomic_json(path, value, javascript=False):
     finally:temporary.unlink(missing_ok=True)
 
 
+def analyze_picos(directory, cylinders=PICOS, progress=print, operation_since=None, client_factory=None):
+    """Separate inputs/results; never substitute another device's baseline."""
+    results = {}
+    reasons = {
+        'NORMAL baseline required': ('NORMAL_BASELINE_REQUIRED','이 Pico의 원본이 있는 정상 기준 세션이 필요합니다.'),
+        'Choose matching physical cylinder and conditions for normal baseline':
+            ('BASELINE_CONDITIONS_REQUIRED','정상 기준의 실물과 조건을 한 그룹으로 확인해야 합니다.'),
+        'Varying normal packets required': ('MORE_NORMAL_PACKETS_REQUIRED','정상 기준 원본 패킷이 더 필요합니다.'),
+        'No matched packets': ('RAW_DATA_REQUIRED','분석할 원본이 없습니다.'),
+        'No operation packets received in requested interval': ('OPERATION_DATA_REQUIRED','지정 구간의 운영 원본이 없습니다.'),
+    }
+    for cylinder in cylinders:
+        client, inventory = None, None
+        try:
+            client = client_factory(cylinder) if client_factory else PicoSQLiteClient(directory,cylinder)
+            if isinstance(client,PicoSQLiteClient): inventory = client.inventory()
+            result = build_snapshot(client,cylinder,progress,operation_since)
+            if isinstance(client,PicoSQLiteClient):
+                client.verify_source()
+                result['source'] = 'PICO_SQLITE_READ_ONLY'
+                result['source_file'] = client.path.name
+                result['source_inventory'] = inventory
+            results[cylinder] = result
+        except Exception as error:
+            known = reasons.get(str(error)) if isinstance(error,ValueError) else None
+            results[cylinder] = dict(
+                status='DATA_REQUIRED' if known else 'ANALYSIS_FAILED', cylinder_id=cylinder,
+                generated_at=datetime.now(timezone.utc).isoformat(),
+                reason=known[0] if known else 'SOURCE_OR_ANALYSIS_FAILED',
+                message=known[1] if known else '해당 Pico DB 또는 분석 입력을 확인하세요. 다른 Pico 결과로 대체하지 않았습니다.',
+                error_type=None if known else type(error).__name__,source_inventory=inventory,
+                normal_packets=0,leak_packets=0,operation_packets=0,sessions=[],default_result=None)
+        finally:
+            if isinstance(client,PicoSQLiteClient): client.close()
+        progress('PICO_ANALYSIS '+cylinder+' '+results[cylinder]['status'],flush=True)
+    valid = [key for key,value in results.items() if value['status']=='SIMULATION_ONLY']
+    return dict(status='PICO_ANALYSIS_COLLECTION',generated_at=datetime.now(timezone.utc).isoformat(),
+                default_cylinder='cylinder_05' if 'cylinder_05' in valid else (valid[0] if valid else cylinders[0]),
+                calculated_picos=valid,picos=results)
+
+
 def main():
     parser=argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--cylinder',default='cylinder_05',choices=['cylinder_%02d'%i for i in range(1,7)])
+    parser.add_argument('--cylinder',choices=PICOS,help='Only this Pico; default analyzes all six independently')
+    parser.add_argument('--all-picos',action='store_true')
+    parser.add_argument('--source',choices=['sqlite','supabase'],default='sqlite')
+    parser.add_argument('--database-directory',type=Path,help='Existing per-Pico archive directory; default root/data')
     parser.add_argument('--operation-since',help='Analyze unlabeled operation received since timezone-aware ISO time')
     parser.add_argument('--root',type=Path,default=Path('/opt/smart-cylinder-pi5'))
     args=parser.parse_args()
+    if args.cylinder and args.all_picos: parser.error('Choose one Pico or --all-picos')
     try:
-        adapter=runpy.run_path(str(args.root/'deploy/pi_sensor_runtime.py'))
-        adapter['load_environment'](str(args.root/'.env'))
-        from system.DB.Supabase.cylinder_result_repository import CylinderResultRepository
-        result=build_snapshot(CylinderResultRepository()._get_client(),args.cylinder,operation_since=args.operation_since)
+        import fcntl
+        lock=open('/tmp/smart-cylinder-lifetime-analysis.lock','a')
+        fcntl.flock(lock,fcntl.LOCK_EX|fcntl.LOCK_NB)
+        client_factory=None
+        if args.source=='supabase':
+            adapter=runpy.run_path(str(args.root/'deploy/pi_sensor_runtime.py'))
+            adapter['load_environment'](str(args.root/'.env'))
+            from system.DB.Supabase.cylinder_result_repository import CylinderResultRepository
+            client_factory=lambda _:CylinderResultRepository()._get_client()
+        chosen=(args.cylinder,) if args.cylinder else PICOS
+        result=analyze_picos(args.database_directory or args.root/'data',chosen,operation_since=args.operation_since,
+                             client_factory=client_factory)
+        for cylinder,snapshot in result['picos'].items():
+            atomic_json(args.root/'data'/('lifetime-condition-pico'+cylinder[-2:]+'.json'),snapshot)
+        if args.cylinder:
+            previous_path=args.root/'data/lifetime-condition-snapshot.json'
+            if previous_path.exists():
+                previous=json.loads(previous_path.read_text(encoding='utf-8'))
+                if previous.get('status')=='PICO_ANALYSIS_COLLECTION':
+                    result['picos']={**previous['picos'],**result['picos']}
         atomic_json(args.root/'data/lifetime-condition-snapshot.json',result)
         atomic_json(args.root/'public/lifetime-condition-snapshot.js',result,javascript=True)
-        print('SIMULATION_SNAPSHOT_READY normal='+str(result['normal_packets'])+' leak='+str(result['leak_packets']),flush=True)
+        print('PICO_SNAPSHOTS_READY calculated='+','.join(result['calculated_picos'])+'; check each Pico status',flush=True)
         return 0
     except Exception as error:
         print('SIMULATION_NOT_UPDATED '+type(error).__name__+'; prior snapshot preserved; no credentials printed',flush=True)

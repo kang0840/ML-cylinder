@@ -1,7 +1,8 @@
 (function(){
   'use strict';
-  const $=id=>document.getElementById(id), data=window.LIFETIME_CONDITION_SNAPSHOT, math=window.LifetimeConditionMath;
-  let current=null;
+  const $=id=>document.getElementById(id), collection=window.LIFETIME_CONDITION_SNAPSHOT, math=window.LifetimeConditionMath;
+  const picos=collection&&collection.picos||(collection?{[collection.cylinder_id]:collection}:{});
+  let data=null,current=null,hasVideo=false;
   const fmt=x=>Number(x).toLocaleString('ko-KR',{maximumFractionDigits:1});
   function field(id){const value=$(id).value.trim();if(!value)throw Error('필수값을 입력하세요.');return Number(value);}
   function plot(id,series,xLabel){
@@ -14,11 +15,13 @@
     c.fillStyle='#a9bcc6';c.fillText(xLabel,l,h-8);
   }
   function renderSpectra(){
+    if(!data||data.status!=='SIMULATION_ONLY')return;
     const spectrum=data.spectra[$('sensor').value],series=[{color:'#43d8b0',points:spectrum.frequency_hz.map((f,i)=>[f,spectrum.normal_mean_log1p[i]])}];
     if(spectrum.leak_mean_log1p)series.push({color:'#ffb86b',points:spectrum.frequency_hz.map((f,i)=>[f,spectrum.leak_mean_log1p[i]])});
     plot('spectrum',series,'주파수 Hz · 세로 log(1 + STFT 진폭)');
   }
   function update(){
+    if(!data||data.status!=='SIMULATION_ONLY'){current=null;return;}
     try{
       const chosen=data.candidates.find(c=>c.key===$('feature').value);if(!chosen)throw Error('분석 자료를 선택하세요.');
       const mode=$('parameterMode').value;
@@ -57,19 +60,42 @@
       renderSpectra();
     }catch(e){current=null;$('error').textContent=e.message;for(const id of ['mean','median','total','used'])$(id).textContent='입력 확인';const c=$('survival');c.getContext('2d').clearRect(0,0,c.width,c.height);}
   }
-  if(!data||data.status!=='SIMULATION_ONLY'||!math){$('error').textContent='분석 스냅샷이 없습니다. Pi에서 모의 수명 분석을 실행하세요.';return;}
+  if(!collection||!math){$('error').textContent='분석 스냅샷이 없습니다. Pi에서 소리 분석을 실행하세요.';return;}
+  function renderSelected(){
+  data=picos[$('pico').value]||{status:'DATA_REQUIRED',cylinder_id:$('pico').value,message:'아직 이 Pico를 계산하지 않았습니다.'};
+  current=null;hasVideo=false;$('age').value='';$('priorMeasuredCycles').value='';
+  $('feature').textContent='';$('sessions').textContent='';$('error').textContent='';
+  for(const id of ['mean','median','total','used'])$(id).textContent='입력 확인';
+  for(const id of ['spectrum','survival']){const canvas=$(id);canvas.getContext('2d').clearRect(0,0,canvas.width,canvas.height);}
+  $('analysisContent').hidden=data.status!=='SIMULATION_ONLY';
+  $('picoState').textContent=data.status==='SIMULATION_ONLY'?'선택 Pico만 분석: '+(data.source_file||data.source):data.message||'분석 자료를 확인하세요.';
+  if(data.status!=='SIMULATION_ONLY'){
+    const inventory=data.source_inventory||{},groups=inventory.groups||[];
+    const count=label=>groups.filter(g=>g.ground_truth===label).reduce((sum,g)=>sum+g.packets,0);
+    $('source').textContent=data.cylinder_id+(data.source_inventory?' · 보유 원본 '+fmt(inventory.raw_packets||0)+'패킷 · 정상 '+fmt(count('NORMAL'))+' · 누설 '+fmt(count('SEAL_LEAK')):' · 보유 원본 수 확인 불가');
+    $('stamp').textContent='분석 확인: '+new Date(data.generated_at||collection.generated_at).toLocaleString('ko-KR',{timeZone:'Asia/Seoul'})+' KST · 다른 Pico 자료로 대체하지 않았습니다.';
+    return;
+  }
   $('source').textContent=data.cylinder_id+' / '+data.physical_cylinder_id+' · 정상 '+fmt(data.normal_packets)+'패킷 · 누설 '+fmt(data.leak_packets)+'패킷';
   $('stamp').textContent=(data.comparison_scope?'실제 운영 자료의 실물·조건 일치 미확인 · ':'')+'자료 생성: '+new Date(data.generated_at).toLocaleString('ko-KR',{timeZone:'Asia/Seoul'})+' KST · 실행 시점의 DB 스냅샷';
   $('operation').textContent='관측 운전 '+fmt(data.operation.observed_operation_seconds)+'초 / 제외한 정지 '+(data.operation.excluded_stop_gap_seconds==null?'미확인':fmt(data.operation.excluded_stop_gap_seconds)+'초')+' · 정확한 전원 경계·실왕복 횟수는 미측정';
   const video=data.video_usage;
-  const hasVideo=video&&video.status==='VIDEO_PERIOD_INTERVAL_ESTIMATE';
+  hasVideo=video&&video.status==='VIDEO_PERIOD_INTERVAL_ESTIMATE';
   $('videoUsage').textContent=hasVideo?'영상 '+video.measurement.source+' · 측정 주기 '+video.measurement.mean_cycle_seconds.toFixed(4)+'초/왕복 · 동일 속도 확인된 6세션 '+fmt(video.observed_operation_seconds)+'초 → 약 '+fmt(video.estimated_interval_cycles)+'회 (구간 환산값, 과거 전체 누적횟수 아님)':'이 자료에는 적용 범위가 확인된 영상 주기 환산이 없습니다.';
   for(const candidate of data.candidates){const option=document.createElement('option');option.value=candidate.key;option.textContent=candidate.name;$('feature').appendChild(option);}
   $('feature').value=data.default_assumptions.feature;$('failures').value=data.default_failures.join(', ');
   for(const s of data.sessions){const row=document.createElement('tr');for(const text of [s.experiment_id,s.ground_truth,s.dataset_role,fmt(s.packets),fmt(s.observed_span_seconds)+'초',s.median_distance.toFixed(4)]){const td=document.createElement('td');td.textContent=text;row.appendChild(td);}$('sessions').appendChild(row);}
-  for(const input of document.querySelectorAll('input,select,textarea'))input.addEventListener('change',update);
+  $('ageMode').value=hasVideo?'video':'manual';update();
+  }
+  for(const cylinder of ['cylinder_01','cylinder_02','cylinder_03','cylinder_04','cylinder_05','cylinder_06']){
+    const option=document.createElement('option');option.value=cylinder;option.textContent='Pico'+cylinder.slice(-2);$('pico').appendChild(option);
+  }
+  const params=new URLSearchParams(location.search),requested=params.get('pico');
+  $('pico').value=requested&&picos[requested]?requested:collection.default_cylinder||collection.cylinder_id||'cylinder_01';
+  $('pico').addEventListener('change',renderSelected);
+  for(const input of document.querySelectorAll('input,select,textarea'))if(input!==$('pico'))input.addEventListener('change',update);
   $('reset').addEventListener('click',()=>{$('age').value='';$('priorMeasuredCycles').value='';$('influence').value='.25';$('ageMode').value=hasVideo?'video':'manual';$('parameterMode').value='fit';$('failures').value=data.default_failures.join(', ');$('feature').value=data.default_assumptions.feature;update();});
   $('download').addEventListener('click',()=>{if(!current)return;const blob=new Blob([JSON.stringify({disclosure:'SIMULATION_ONLY: 실측 STFT + 논문 기준 + 실측 또는 영상 환산 사용량(구분 표시) + 가설 소리 영향',scenario:current,snapshot:data},null,2)],{type:'application/json'}),url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download='SIMULATION_ONLY-condition-weibull.json';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);});
   window.addEventListener('resize',update);const serial=new URLSearchParams(location.search).get('serial');if(serial)$('back').href='monitoring.html?serial='+encodeURIComponent(serial);
-  $('age').value='';$('priorMeasuredCycles').value='';$('ageMode').value=hasVideo?'video':'manual';update();
+  renderSelected();
 })();
