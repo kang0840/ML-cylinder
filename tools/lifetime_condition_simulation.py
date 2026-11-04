@@ -22,6 +22,55 @@ CONFIGS = {
     'inmp441': dict(window_size=1024, hop_length=256, n_fft=1024, window_function='hann'),
 }
 
+VIDEO_PERIOD_MEASUREMENT = dict(
+    source='20261104_150725.mp4', mean_cycle_seconds=2.6016069444444443,
+    source_sha256='ff18a9b670f1d9e334968da82af55cdca6490d8cc83e1ab23ca5447359edb887',
+    min_cycle_seconds=2.5989951388888883, max_cycle_seconds=2.6031722222222253,
+    measured_cycle_intervals=8, capture_fps=240,
+    timing_basis='RAW_MP4_PTS_DIVIDED_BY_8; SAME_DIRECTION_ROD_TRANSITIONS',
+    speed_confirmation='USER_CONFIRMED_SAME_OPERATING_SPEED_2026_11_04',
+)
+
+
+def apply_video_period(snapshot):
+    """Confirmed six-session usage estimate, never a fabricated lifetime age."""
+    measurement = dict(VIDEO_PERIOD_MEASUREMENT)
+    selected = [s for s in snapshot['sessions'] if s.get('ground_truth') == 'SEAL_LEAK']
+    result = dict(status='VIDEO_PERIOD_SCOPE_NOT_CONFIRMED', measurement=measurement,
+                  estimated_interval_cycles=None, prior_lifetime_cycles=None,
+                  estimated_total_cycles=None, actual_measured_cycles=None)
+    if (snapshot['cylinder_id'] != 'cylinder_05' or snapshot.get('physical_cylinder_id') != 'CYL-005'
+            or {s['session_id'] for s in selected} != CONFIRMED_STOP_SESSIONS
+            or len(selected) != len(CONFIRMED_STOP_SESSIONS)
+            or any(s.get('cylinder_id') != 'cylinder_05' or s.get('physical_cylinder_id') != 'CYL-005' for s in selected)
+            or not snapshot['operation'].get('confirmed_stops')):
+        snapshot['video_usage'] = result
+        return snapshot
+    spans = []
+    for session in selected:
+        start = datetime.fromisoformat(session['first_received_at'])
+        end = datetime.fromisoformat(session['last_received_at'])
+        if start.tzinfo is None or end.tzinfo is None or end < start:
+            raise ValueError('Valid Pi receipt spans required for video usage')
+        spans.append((start, end))
+    spans.sort()
+    if any(right[0] < left[1] for left, right in zip(spans, spans[1:])):
+        raise ValueError('Overlapping session spans')
+    seconds = sum((end-start).total_seconds() for start,end in spans)
+    if not math.isclose(seconds, snapshot['operation']['observed_operation_seconds'], abs_tol=1e-6):
+        raise ValueError('Observed operation span mismatch')
+    result.update(status='VIDEO_PERIOD_INTERVAL_ESTIMATE',
+                  observed_operation_seconds=seconds,
+                  source_session_ids=sorted(CONFIRMED_STOP_SESSIONS),
+                  estimated_interval_cycles=seconds/measurement['mean_cycle_seconds'],
+                  observed_period_range_cycles=[seconds/measurement['max_cycle_seconds'],
+                                                seconds/measurement['min_cycle_seconds']],
+                  timing_basis='SUM_OF_FIRST_TO_LAST_PI_RECEIPT_SPANS; STOP_GAPS_EXCLUDED',
+                  limitation='Interval estimate only; previous lifetime usage remains unknown. Period range is not a confidence interval.')
+    snapshot['video_usage'] = result
+    snapshot['usage_status'] = 'INTERVAL_ESTIMATED_PRIOR_LIFETIME_UNKNOWN'
+    return snapshot
+
 
 def fit_weibull(failures):
     if len(failures) < 2 or any(isinstance(x, bool) or not math.isfinite(x) or x <= 0 for x in failures):
@@ -230,7 +279,7 @@ def build_snapshot(client, cylinder, progress=print, operation_since=None):
         snapshot['comparison_scope']='SAME_CHANNEL_OPERATION; physical identity and conditions unconfirmed; not a validated condition comparison'
         snapshot['operation_since']=operation_since
     snapshot['paper_fit']=fit
-    return snapshot
+    return apply_video_period(snapshot)
 
 
 def atomic_json(path, value, javascript=False):

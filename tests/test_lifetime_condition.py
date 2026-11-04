@@ -12,6 +12,22 @@ model=importlib.util.module_from_spec(spec);spec.loader.exec_module(model)
 
 
 class ConditionScenarioTests(unittest.TestCase):
+    def test_video_period_applies_only_to_confirmed_interval_not_lifetime(self):
+        from copy import deepcopy
+        data=json.loads((ROOT/'public/lifetime-condition-snapshot.js').read_text(encoding='utf-8').split('=',1)[1].strip().rstrip(';'))
+        result=model.apply_video_period(deepcopy(data))['video_usage']
+        self.assertEqual(result['status'],'VIDEO_PERIOD_INTERVAL_ESTIMATE')
+        self.assertAlmostEqual(result['estimated_interval_cycles'],1011.437089/2.6016069444444443,places=6)
+        self.assertIsNone(result['prior_lifetime_cycles'])
+        self.assertIsNone(result['estimated_total_cycles'])
+        self.assertIsNone(result['actual_measured_cycles'])
+        wrong=deepcopy(data);wrong['cylinder_id']='cylinder_01'
+        self.assertIsNone(model.apply_video_period(wrong)['video_usage']['estimated_interval_cycles'])
+        wrong=deepcopy(data);wrong['operation']['confirmed_stops']=False
+        self.assertIsNone(model.apply_video_period(wrong)['video_usage']['estimated_interval_cycles'])
+        wrong=deepcopy(data);wrong['sessions']=[s for s in wrong['sessions'] if s['session_id']!=next(iter(model.CONFIRMED_STOP_SESSIONS))]
+        self.assertIsNone(model.apply_video_period(wrong)['video_usage']['estimated_interval_cycles'])
+
     def test_paper_mle_and_scale_equivariance(self):
         fit=model.fit_weibull(model.PAPER_FAILURES)
         self.assertAlmostEqual(fit['shape'],7.51525,places=4)
@@ -66,16 +82,19 @@ const fs=require('fs'),vm=require('vm'),assert=require('assert'),root=process.ar
 const elements=new Map();
 function element(id){if(!elements.has(id))elements.set(id,{value:'',textContent:'',disabled:false,clientWidth:800,width:800,height:280,children:[],listeners:{},addEventListener(k,f){this.listeners[k]=f},appendChild(x){this.children.push(x)},getContext(){return new Proxy({},{get:()=>()=>{}})}});return elements.get(id)}
 for(const [id,value] of Object.entries({parameterMode:'fit',ageMode:'manual',age:'50000',influence:'.25',period:'',prior:'0',sensor:'inmp441'}))element(id).value=value;
-const ids=['parameterMode','ageMode','age','influence','period','prior','sensor','shape','scale','failures','feature'];
+const ids=['parameterMode','ageMode','age','priorMeasuredCycles','influence','period','prior','sensor','shape','scale','failures','feature'];
 const c={console,Math,Number,Array,Object,Error,Date,URLSearchParams,location:{search:''},setTimeout(){},document:{getElementById:element,createElement:()=>({appendChild(){}}),querySelectorAll:()=>ids.map(element)}};
 c.window=c;c.devicePixelRatio=1;c.addEventListener=()=>{};
 vm.createContext(c);for(const f of ['lifetime-condition-math.js','lifetime-condition-snapshot.js','lifetime-condition-ui.js'])vm.runInContext(fs.readFileSync(root+'/public/'+f,'utf8'),c);
 assert(element('error').textContent.includes('누적 사용량 미상'));assert.equal(element('mean').textContent,'입력 확인');
-element('age').value='100';element('age').listeners.change();assert.equal(element('error').textContent,'');assert(element('used').textContent.includes('실측 입력'));
+assert(element('videoUsage').textContent.includes('2.6016'));assert(element('videoUsage').textContent.includes('388.8'));
+element('ageMode').value='manual';element('age').value='100';element('age').listeners.change();assert.equal(element('error').textContent,'');assert(element('used').textContent.includes('실측 입력'));
 element('age').value='100.5';element('age').listeners.change();assert(element('error').textContent.includes('정수'));assert.equal(element('mean').textContent,'입력 확인');
 element('ageMode').value='operation';element('ageMode').listeners.change();assert(element('error').textContent.includes('생성하지 않습니다'));assert.equal(element('mean').textContent,'입력 확인');
 element('reset').listeners.click();assert(element('error').textContent.includes('누적 사용량 미상'));assert.equal(element('age').value,'');
-element('age').value='100';
+element('ageMode').value='video';element('priorMeasuredCycles').value='';element('priorMeasuredCycles').listeners.change();assert(element('error').textContent.includes('이전'));
+element('priorMeasuredCycles').value='100';element('priorMeasuredCycles').listeners.change();assert.equal(element('error').textContent,'');assert(element('used').textContent.includes('환산 포함'));
+element('ageMode').value='manual';element('age').value='100';
 element('failures').value='100,100';element('failures').listeners.change();assert(element('error').textContent.length>0);assert.equal(element('mean').textContent,'입력 확인');
 console.log('PASS snapshot counts, scenario updates, observed time conversion, invalid input clearing and reset');
 '''

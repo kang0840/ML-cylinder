@@ -28,18 +28,30 @@
       $('scale').disabled=mode==='fit';$('shape').disabled=mode==='fit';$('failures').disabled=mode!=='fit';
       renderSpectra();
       $('distance').textContent=chosen.name+' · 정상 대비 STFT 편차 D='+chosen.distance.toFixed(4);
-      if($('ageMode').value!=='manual')throw Error('시간·가정 주기로 사용 횟수를 생성하지 않습니다. 실측 누적 횟수가 필요합니다.');
-      const rawAge=$('age').value.trim();
-      if(!rawAge)throw Error('누적 사용량 미상: STFT는 표시하며 잔여수명은 계산하지 않습니다.');
-      const age=field('age');
-      if(!Number.isInteger(age)||age<0)throw Error('실측 누적 왕복 횟수는 0 이상의 정수여야 합니다.');
+      const usageMode=$('ageMode').value,video=data.video_usage;
+      $('age').disabled=usageMode==='video';$('priorMeasuredCycles').disabled=usageMode!=='video';
+      let age;
+      if(usageMode==='video'){
+        if(!video||video.status!=='VIDEO_PERIOD_INTERVAL_ESTIMATE'||!(video.estimated_interval_cycles>=0))throw Error('동일 속도와 정지구간이 확인된 영상 환산 자료가 없습니다.');
+        if(!$('priorMeasuredCycles').value.trim())throw Error('누적 사용량 미상: 영상으로 이번 구간은 약 '+fmt(video.estimated_interval_cycles)+'회로 환산했습니다. 실험 이전 누적횟수는 아직 미상이며, STFT는 표시하고 잔여수명은 계산하지 않습니다.');
+        const prior=field('priorMeasuredCycles');
+        if(!Number.isInteger(prior)||prior<0)throw Error('이전 실측 누적횟수는 0 이상의 정수여야 합니다. 미상을 0으로 입력하지 마세요.');
+        age=prior+video.estimated_interval_cycles;
+      }else if(usageMode==='manual'){
+        if(!$('age').value.trim())throw Error('누적 사용량 미상: STFT는 표시하며 잔여수명은 계산하지 않습니다.');
+        age=field('age');
+        if(!Number.isInteger(age)||age<0)throw Error('실측 누적 왕복 횟수는 0 이상의 정수여야 합니다.');
+      }else throw Error('임의의 시간·가정 주기로 사용 횟수를 생성하지 않습니다.');
       current=math.evaluate({age,distance:chosen.distance,influence:field('influence'),...fit});
       current.snapshot_generated_at=data.generated_at;current.selected_feature=chosen.key;
-      current.usage_basis='USER_REPORTED_MEASURED_CYCLES';current.measured_age_cycles=age;
+      if(usageMode==='video'){
+        current.usage_basis='VIDEO_PERIOD_INTERVAL_PLUS_REPORTED_MEASURED_PRIOR';current.estimated_age_cycles=age;
+        current.prior_measured_cycles=field('priorMeasuredCycles');current.video_usage=video;
+      }else {current.usage_basis='USER_REPORTED_MEASURED_CYCLES';current.measured_age_cycles=age;}
       delete current.assumed_age_cycles;
       current.failure_counts=mode==='fit'?failures:null;current.parameter_mode=mode;
       $('mean').textContent=fmt(current.mean_remaining_cycles)+' 회';$('median').textContent=fmt(current.median_remaining_cycles)+' 회';
-      $('total').textContent=fmt(current.mean_total_cycles)+' 회';$('used').textContent=fmt(age)+' 회 (실측 입력)';
+      $('total').textContent=fmt(current.mean_total_cycles)+' 회';$('used').textContent=fmt(age)+(usageMode==='video'?' 회 (영상 주기 기반 환산 포함)':' 회 (실측 입력)');
       $('distance').textContent=chosen.name+' · 정상 대비 편차 D='+chosen.distance.toFixed(4)+(chosen.distance===0?' · 현재 대표값은 정상 변동 범위 안입니다. 정상 판정이나 수명 차이의 검증을 뜻하지 않습니다.':'');
       $('error').textContent='';plot('survival',[{color:'#64ceff',points:current.survival.map(p=>[p.extra_cycles,p.probability*100])}],'추가 사용 횟수 (가정) · 세로 조건부 생존확률 %');
       renderSpectra();
@@ -49,12 +61,15 @@
   $('source').textContent=data.cylinder_id+' / '+data.physical_cylinder_id+' · 정상 '+fmt(data.normal_packets)+'패킷 · 누설 '+fmt(data.leak_packets)+'패킷';
   $('stamp').textContent=(data.comparison_scope?'실제 운영 자료의 실물·조건 일치 미확인 · ':'')+'자료 생성: '+new Date(data.generated_at).toLocaleString('ko-KR',{timeZone:'Asia/Seoul'})+' KST · 실행 시점의 DB 스냅샷';
   $('operation').textContent='관측 운전 '+fmt(data.operation.observed_operation_seconds)+'초 / 제외한 정지 '+(data.operation.excluded_stop_gap_seconds==null?'미확인':fmt(data.operation.excluded_stop_gap_seconds)+'초')+' · 정확한 전원 경계·실왕복 횟수는 미측정';
+  const video=data.video_usage;
+  const hasVideo=video&&video.status==='VIDEO_PERIOD_INTERVAL_ESTIMATE';
+  $('videoUsage').textContent=hasVideo?'영상 '+video.measurement.source+' · 측정 주기 '+video.measurement.mean_cycle_seconds.toFixed(4)+'초/왕복 · 동일 속도 확인된 6세션 '+fmt(video.observed_operation_seconds)+'초 → 약 '+fmt(video.estimated_interval_cycles)+'회 (구간 환산값, 과거 전체 누적횟수 아님)':'이 자료에는 적용 범위가 확인된 영상 주기 환산이 없습니다.';
   for(const candidate of data.candidates){const option=document.createElement('option');option.value=candidate.key;option.textContent=candidate.name;$('feature').appendChild(option);}
   $('feature').value=data.default_assumptions.feature;$('failures').value=data.default_failures.join(', ');
   for(const s of data.sessions){const row=document.createElement('tr');for(const text of [s.experiment_id,s.ground_truth,s.dataset_role,fmt(s.packets),fmt(s.observed_span_seconds)+'초',s.median_distance.toFixed(4)]){const td=document.createElement('td');td.textContent=text;row.appendChild(td);}$('sessions').appendChild(row);}
   for(const input of document.querySelectorAll('input,select,textarea'))input.addEventListener('change',update);
-  $('reset').addEventListener('click',()=>{$('age').value='';$('influence').value='.25';$('ageMode').value='manual';$('parameterMode').value='fit';$('failures').value=data.default_failures.join(', ');$('feature').value=data.default_assumptions.feature;update();});
-  $('download').addEventListener('click',()=>{if(!current)return;const blob=new Blob([JSON.stringify({disclosure:'SIMULATION_ONLY: 실측 STFT + 논문 기준 + 실측 입력 사용량 + 가설 소리 영향',scenario:current,snapshot:data},null,2)],{type:'application/json'}),url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download='SIMULATION_ONLY-condition-weibull.json';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);});
+  $('reset').addEventListener('click',()=>{$('age').value='';$('priorMeasuredCycles').value='';$('influence').value='.25';$('ageMode').value=hasVideo?'video':'manual';$('parameterMode').value='fit';$('failures').value=data.default_failures.join(', ');$('feature').value=data.default_assumptions.feature;update();});
+  $('download').addEventListener('click',()=>{if(!current)return;const blob=new Blob([JSON.stringify({disclosure:'SIMULATION_ONLY: 실측 STFT + 논문 기준 + 실측 또는 영상 환산 사용량(구분 표시) + 가설 소리 영향',scenario:current,snapshot:data},null,2)],{type:'application/json'}),url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download='SIMULATION_ONLY-condition-weibull.json';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);});
   window.addEventListener('resize',update);const serial=new URLSearchParams(location.search).get('serial');if(serial)$('back').href='monitoring.html?serial='+encodeURIComponent(serial);
-  $('age').value='';update();
+  $('age').value='';$('priorMeasuredCycles').value='';$('ageMode').value=hasVideo?'video':'manual';update();
 })();
