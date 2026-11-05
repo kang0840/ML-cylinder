@@ -64,5 +64,55 @@
       survival:Array.from({length:81},(_,i)=>({cycles:upper*i/80,probability:Math.exp(-Math.pow((upper*i/80)/scale,shape))})),
       formula:'mean(D)=reference_mean*exp(-assumed_gamma*D); unconditional total-life scenario, not remaining life'};
   }
-  const api={fit,evaluate,condition};root.LifetimeConditionMath=api;if(typeof module!=='undefined')module.exports=api;
+  const paperFailures=[3500000,5000000,6000000,8000000,10000000];
+  const videoSessions=['c1a75b49-3852-4b08-9dfb-647121e15d2d','2f5c7571-b033-4423-b7bd-9cb9bc99fca2','2f138a41-621d-46e3-bfd2-d87dfe1f8498','4bd5133d-2ffa-4071-8d76-5916c7dcb398','39573bde-c929-4612-a19f-cb81a6b3b2ae','0b82f226-b803-4c35-b287-e357bc3fc167'];
+  function pressureDistribution(beta,eta){
+    return {beta,eta_cycles:eta,mean_cycles:eta*Math.exp(logGamma(1+1/beta)),median_cycles:eta*Math.pow(Math.log(2),1/beta),b10_cycles:eta*Math.pow(-Math.log(.9),1/beta)};
+  }
+  function pressureReliability(cycles,beta,eta){
+    if(![cycles,beta,eta].every(x=>typeof x==='number'&&Number.isFinite(x))||cycles<0||beta<=0||eta<=0)throw Error('유효한 왕복 위치와 Weibull 모수가 필요합니다.');
+    if(cycles===0)return {cycles:0,reliability:1,failure_probability:0};
+    const logHazard=beta*Math.log(cycles/eta),hazard=logHazard<Math.log(745)?Math.exp(logHazard):Infinity;
+    return {cycles,reliability:Math.exp(-hazard),failure_probability:-Math.expm1(-hazard)};
+  }
+  function pressureTimeHours(cycles,scope){
+    if(typeof cycles!=="number"||!Number.isFinite(cycles)||cycles<0)throw Error("유효한 왕복 횟수가 필요합니다.");
+    if(!scope||scope.cylinder_id!=='cylinder_05'||scope.physical_cylinder_id!=='CYL-005'||scope.same_speed_confirmed!==true||
+      !Array.isArray(scope.session_ids)||scope.session_ids.length!==6||new Set(scope.session_ids).size!==6||
+      !scope.session_ids.every(id=>videoSessions.includes(id))||!Number.isFinite(scope.period_seconds)||Math.abs(scope.period_seconds-2.6016069444)>1e-10)return null;
+    return cycles*2.6016069444/3600;
+  }
+  function pressureScenario({failures=paperFailures,paperPressure=1.2,targetPressure=.2,exponent=1,timeScope=null}={}){
+    if(!Array.isArray(failures)||failures.length!==5||failures.some(v=>typeof v!=='number'||!Number.isFinite(v)||v<=0||!Number.isInteger(v)))throw Error('고장 시편별 양의 정수 횟수 5개를 입력하세요. 평균 하나를 시편으로 넣지 않습니다.');
+    if(![paperPressure,targetPressure,exponent].every(v=>typeof v==='number'&&Number.isFinite(v))||paperPressure<=0||targetPressure<=0||exponent<0||exponent>10)throw Error('양의 압력과 0~10 범위의 가정 지수 m을 입력하세요.');
+    const factor=Math.pow((paperPressure*1000000)/(targetPressure*1000000),exponent),mock=failures.map(v=>v*factor);
+    if(!Number.isFinite(factor)||mock.some(v=>!Number.isFinite(v)||v<=0))throw Error('환산 횟수가 지원 범위를 벗어났습니다.');
+    const logs=mock.map(Math.log),average=logs.reduce((a,b)=>a+b,0)/logs.length,centered=logs.map(v=>v-average),peak=Math.max(...centered);
+    if(Math.max(...logs)-Math.min(...logs)<1e-12)throw Error('고장 횟수 5개가 모두 같습니다.');
+    function score(beta){const w=centered.map(v=>Math.exp(beta*(v-peak)));return 1/beta-w.reduce((sum,v,i)=>sum+v*centered[i],0)/w.reduce((a,b)=>a+b,0);}
+    let lo=1e-6,hi=1;while(score(hi)>0&&hi<1e6)hi*=2;
+    if(score(hi)>0)throw Error('Weibull 형상모수를 적합할 수 없습니다.');
+    for(let i=0;i<160;i++){const mid=(lo+hi)/2;if(score(mid)>0)lo=mid;else hi=mid;}
+    const beta=(lo+hi)/2,eta=Math.exp(average+peak+Math.log(centered.reduce((sum,v)=>sum+Math.exp(beta*(v-peak)),0)/logs.length)/beta),weibull=pressureDistribution(beta,eta);
+    const upper=eta*Math.pow(-Math.log(1e-6),1/beta);
+    return {status:'SIMULATION_ONLY',version:'woo2018_pressure_five_failure_mle_v1',
+      paper:{url:'https://www.davidpublisher.com/Public/uploads/Contribute/5c3465f825c7e.pdf',year:2018,company:'A',pressure_mpa:1.2,temperature_c:23,bore_mm:32,stroke_mm:160,cycle_seconds:1,total_specimens:6,observed_failures:5,censored_end_cycles:null,failure_cycles:paperFailures.slice()},
+      scenario_input_failure_cycles:failures.slice(),assumptions:{paper_pressure_mpa:paperPressure,target_pressure_mpa:targetPressure,pressure_exponent:exponent,pressure_factor:factor,stroke_ratio_correction_applied:false,source_values_edited:paperPressure!==1.2||failures.some((v,i)=>v!==paperFailures[i])},
+      mock_failure_cycles:mock,weibull:{...weibull,method:'two_parameter_location_zero_complete_failure_mle_profile_score',location:0,censored_observations_used:0},
+      simplification:{total_specimens_reported:6,failed_used:5,censoring_used:false,unfailed_endpoint_cycles:null},
+      time_conversion:{scope:timeScope,mean_operating_hours:pressureTimeHours(weibull.mean_cycles,timeScope),b10_operating_hours:pressureTimeHours(weibull.b10_cycles,timeScope),speed_wear_correction_applied:false,calendar_years:null},
+      curves:Array.from({length:101},(_,i)=>pressureReliability(upper*i/100,beta,eta))};
+  }
+  function pressureHypothesis(base,distance,coefficient=null){
+    if(typeof distance!=='number'||!Number.isFinite(distance)||distance<0)throw Error('유효한 STFT 정규화 편차가 필요합니다.');
+    if(coefficient===null)return {status:'ASSUMPTION_NOT_SELECTED',coefficient:null,condition_distance:distance,mean_life_cycles:null,actual_age_cycles:null,remaining_cycles:null};
+    if(typeof coefficient!=='number'||!Number.isFinite(coefficient)||coefficient<0||coefficient>5)throw Error('사용자가 선택한 가정 계수 k를 0~5 범위로 입력하세요.');
+    const beta=base.weibull.beta,eta=base.weibull.eta_cycles*Math.exp(-coefficient*distance);
+    if(eta<1e-6)throw Error('가정한 STFT 영향이 너무 큽니다.');
+    const d=pressureDistribution(beta,eta),upper=eta*Math.pow(-Math.log(1e-6),1/beta);
+    return {status:'SIMULATION_ONLY',label:'STFT 상태를 반영한 가설 평균수명',coefficient,coefficient_source:'EXPLICIT_USER_ASSUMPTION_NOT_LEARNED',condition_distance:distance,beta_fixed:true,shape:beta,effective_scale:eta,
+      mean_life_cycles:d.mean_cycles,median_life_cycles:d.median_cycles,b10_life_cycles:d.b10_cycles,reference_mean_cycles:base.weibull.mean_cycles,actual_age_cycles:null,remaining_cycles:null,mean_operating_hours:null,b10_operating_hours:null,
+      survival:Array.from({length:101},(_,i)=>pressureReliability(upper*i/100,beta,eta))};
+  }
+  const api={fit,evaluate,condition,pressureScenario,pressureHypothesis,pressureReliability,pressureTimeHours};root.LifetimeConditionMath=api;if(typeof module!=='undefined')module.exports=api;
 })(typeof window!=='undefined'?window:globalThis);

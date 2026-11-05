@@ -1,7 +1,7 @@
 (function(){
   'use strict';
   const $=id=>document.getElementById(id),math=window.LifetimeConditionMath;
-  let snapshot=null,busy=false,current=null;
+  let snapshot=null,busy=false,current=null,base=null;
   const count=x=>Number(x).toLocaleString('ko-KR',{maximumFractionDigits:0});
   const decimal=x=>Number(x).toLocaleString('ko-KR',{maximumFractionDigits:3});
   const stamp=x=>new Date(x).toLocaleString('ko-KR',{timeZone:'Asia/Seoul'});
@@ -26,8 +26,28 @@
     c.fillStyle='#a9bcc6';c.fillText(axis,left,h-5);
   }
   function resetResults(){current=null;$('demoSpectrum').hidden=true;$('demoSurvival').hidden=true;for(const id of ['demoMean','demoMedian','demoDistance','demoNearest'])$(id).textContent='비교 대기';clearPlot('demoSpectrum');clearPlot('demoSurvival');}
+  function renderPaper(){
+    const failures=$('demoPaperFailures').value.split(/[,\s]+/).filter(Boolean).map(Number);
+    base=math.pressureScenario({failures,targetPressure:Number($('demoTargetPressure').value),exponent:Number($('demoPressureExponent').value)});
+    const w=base.weibull;
+    $('paperMock').textContent='모의 고장 횟수: '+base.mock_failure_cycles.map(count).join(' / ')+' 왕복';
+    $('paperFit').textContent='β = '+decimal(w.beta)+' · η = '+count(w.eta_cycles)+' 왕복 · 고장 5개 MLE';
+    $('paperMean').textContent=count(w.mean_cycles)+' 왕복';$('paperMedian').textContent=count(w.median_cycles)+' 왕복';$('paperB10').textContent=count(w.b10_cycles)+' 왕복';
+    // This is only the confirmed historical experiment's time conversion, never current demo usage.
+    const usage=window.LIFETIME_DB_USAGE,entry=usage&&usage.picos&&usage.picos.cylinder_05;
+    const video=entry&&entry.video_usage;
+    const scope=video?{cylinder_id:'cylinder_05',physical_cylinder_id:'CYL-005',same_speed_confirmed:video.measurement?.speed_confirmation==='USER_CONFIRMED_SAME_OPERATING_SPEED_2026_11_04',period_seconds:video.measurement?.mean_cycle_seconds,session_ids:video.source_session_ids}:null;
+    const hours=$('pico').value==='cylinder_05'?math.pressureTimeHours(w.mean_cycles,scope):null;
+    $('paperHours').textContent=hours===null?'시간 환산 미적용: 확인된 Pico05/CYL-005 과거 6세션의 동일 속도 범위에만 2.6016069444초/왕복을 적용합니다.':'확인된 과거 Pico05 실험 속도로만 환산: 평균 '+count(hours)+'시간 / B10 '+count(math.pressureTimeHours(w.b10_cycles,scope))+'시간. 현재 시현 사용량·잔여수명이 아닙니다.';
+    const n=Number($('paperCyclePosition').value);if(!Number.isInteger(n)||n<0)throw Error('N은 0 이상의 정수 왕복 횟수로 입력하세요.');
+    const prob=math.pressureReliability(n,w.beta,w.eta_cycles);
+    $('paperProbability').textContent='R(N) 신뢰도 '+decimal(prob.reliability*100)+'% · F(N) 누적 고장확률 '+decimal(prob.failure_probability*100)+'%';
+    plot('paperSurvival',[{color:'#43d8b0',points:base.curves.map(p=>[p.cycles,p.reliability*100])},{color:'#ffb86b',points:base.curves.map(p=>[p.cycles,p.failure_probability*100])}],'가정 왕복 횟수 · 신뢰도(초록) / 누적 고장확률(주황) %');
+  }
   function render(){
     resetResults();
+    $('demoInfluence').disabled=!$('demoHypothesisEnabled').checked;
+    try{renderPaper();}catch(error){base=null;for(const id of ['paperMean','paperMedian','paperB10','paperFit','paperMock','paperHours','paperProbability'])$(id).textContent='계산 불가';clearPlot('paperSurvival');$('demoStatus').textContent=error.message;return;}
     if(!snapshot||!math){$('demoStatus').textContent='시현 비교 자료가 없습니다. Pi에서 08. 모의 수명 분석을 실행하세요.';return;}
     const data=snapshot.picos&&snapshot.picos[$('pico').value];
     const publicSite=location.hostname.endsWith('onrender.com');
@@ -37,6 +57,11 @@
     $('demoStatus').textContent=(messages[data.status]||'시현 분석 상태를 확인하세요.')+(data.reason?' ('+data.reason+')':'');
     if(old&&!replay)$('demoStatus').textContent+=' · 갱신 시각이 오래됐습니다. 현재 시현 결과가 아닙니다.';
     const reference=data.reference||{};
+    const checks=snapshot.labeled_reference_checks&&snapshot.labeled_reference_checks[$('pico').value];
+    $('demoReferenceChecks').textContent=checks?'과거 수동 라벨 구간 재대입 확인 (현재 시현·독립 성능검증 아님): '+Object.entries(checks).map(([label,c])=>label+' D='+(c.condition_distance==null?'계산 불가':decimal(c.condition_distance))).join(' / ')+'. D=0은 정상 95분위 이내라는 뜻이며 정상 확정·두 소리 동일을 뜻하지 않습니다.':'';
+    const audit=data.selection_audit;
+    $('demoAudit').textContent=audit&&audit.valid_packet_count>0?'선택 원본 ID '+audit.minimum_raw_id+'~'+audit.maximum_raw_id+' · '+audit.valid_packet_count+'패킷 · '+stamp(audit.first_received_at)+'~'+stamp(audit.last_received_at)+' KST. 세션·개별 ID·STFT 설정과 편차 공식은 내려받기 자료에 포함됩니다.':(reference.reason?'자료 부족 사유: '+reference.reason:'');
+
     $('demoCounts').textContent='정상 기준 '+count(reference.normal_packets||0)+'패킷 / 누설 비교 '+count(reference.leak_packets||0)+'패킷 · 시현 조회 '+count(data.sampled_packets||0)+'패킷 / 음향 후보 '+count(data.active_candidates||0)+'개 / 낮은 활동성 제외 '+count(data.low_activity_packets||0)+'개 · Pico DB 보유 '+(data.source_raw_packets==null?'미확인':count(data.source_raw_packets)+'패킷');
     $('demoConditions').textContent=data.identity_conditions_confirmed?'시현 데이터의 실물·조건이 기준과 일치합니다.':'시현 데이터의 실물·조건 일치는 미확인입니다. 같은 Pico 채널의 탐색적 비교입니다.';
     const baseline=reference.sensors&&reference.sensors[$('demoSensor').value];
@@ -47,18 +72,22 @@
     }
     if(data.status!=='DEMO_COMPARISON_READY'||(old&&!replay))return;
     try{
-      const referenceMean=Number($('demoPaperMean').value),influence=Number($('demoInfluence').value);
-      if(!Number.isInteger(referenceMean)||referenceMean<1)throw Error('논문 수명 기준은 1 이상의 정수 왕복 횟수로 입력하세요.');
-      current=math.condition({referenceMean,shape:snapshot.defaults.shape,distance:data.condition_distance,influence});
-      $('demoMean').textContent=count(current.mean_life_cycles)+' 왕복';$('demoMedian').textContent=count(current.median_life_cycles)+' 왕복';
       $('demoDistance').textContent='정상 '+decimal(data.normal_distance)+(data.leak_distance==null?' / 누설 기준 부족':' / 누설 '+decimal(data.leak_distance));
       $('demoNearest').textContent=data.reference_closer==='NORMAL'?'정상 기준에 더 가까움':data.reference_closer==='SEAL_LEAK'?'누설 기준에 더 가까움':'두 기준의 구분 불확실';
       $('demoNearest').textContent+=' · 상태 정답 아님';
       const spectrum=data.spectra[$('demoSensor').value],series=[{color:'#43d8b0',points:spectrum.frequency_hz.map((f,i)=>[f,spectrum.normal_mean[i]])}];
       if(spectrum.leak_mean)series.push({color:'#ffb86b',points:spectrum.frequency_hz.map((f,i)=>[f,spectrum.leak_mean[i]])});
       series.push({color:'#64ceff',points:spectrum.frequency_hz.map((f,i)=>[f,spectrum.demo_mean[i]])});$('demoSpectrum').hidden=false;plot('demoSpectrum',series,'주파수 Hz · 세로 log(1 + STFT 진폭)');
-      $('demoSurvival').hidden=false;plot('demoSurvival',[{color:'#64ceff',points:current.survival.map(p=>[p.cycles,p.probability*100])}],'총 수명 왕복 횟수 · 세로 생존확률 %');
-    }catch(error){resetResults();$('demoStatus').textContent=error.message;}
+      let influence=null;
+      if($('demoHypothesisEnabled').checked){
+        if($('demoInfluence').value.trim()==='')throw Error('가설 계수 k를 직접 입력하세요.');
+        influence=Number($('demoInfluence').value);
+      }
+      current=math.pressureHypothesis(base,data.condition_distance,influence);
+      $('demoMean').textContent=current.mean_life_cycles===null?'가설 미선택':count(current.mean_life_cycles)+' 왕복';
+      $('demoMedian').textContent=current.mean_life_cycles===null?'가설 미선택':count(current.median_life_cycles)+' 왕복';
+      if(current.survival){$('demoSurvival').hidden=false;plot('demoSurvival',[{color:'#64ceff',points:current.survival.map(p=>[p.cycles,p.reliability*100])}],'가설 총 수명 왕복 횟수 · 세로 신뢰도 %');}
+    }catch(error){current=null;$('demoMean').textContent='가설 입력 확인';$('demoMedian').textContent='가설 입력 확인';$('demoSurvival').hidden=true;clearPlot('demoSurvival');$('demoStatus').textContent=error.message;}
   }
   async function refresh(){
     if(busy)return;busy=true;
@@ -69,15 +98,15 @@
       if(next.status!=='DEMO_COMPARISON_COLLECTION'||!next.picos)throw Error('시현 분석 자료 형식을 확인하세요.');
       if(!snapshot||new Date(next.generated_at)>=new Date(snapshot.generated_at))snapshot=next;
       render();
-    }catch(error){resetResults();$('demoStatus').textContent=error.message;}
+    }catch(error){resetResults();try{renderPaper();}catch(_){}$('demoStatus').textContent=error.message;}
     finally{busy=false;}
   }
-  for(const id of ['demoPaperMean','demoInfluence','demoSensor','pico'])$(id).addEventListener('change',render);
+  for(const id of ['demoPaperFailures','demoTargetPressure','demoPressureExponent','paperCyclePosition','demoHypothesisEnabled','demoInfluence','demoSensor','pico'])$(id).addEventListener('change',render);
   $('demoRefresh').addEventListener('click',refresh);
-  $('demoReset').addEventListener('click',()=>{$('demoPaperMean').value='167500';$('demoInfluence').value='.25';render();});
+  $('demoReset').addEventListener('click',()=>{$('demoPaperFailures').value='3500000,5000000,6000000,8000000,10000000';$('demoTargetPressure').value='.2';$('demoPressureExponent').value='1';$('demoHypothesisEnabled').checked=false;$('demoInfluence').value='';render();});
   $('demoDownload').addEventListener('click',()=>{
     if(!snapshot)return;const data=snapshot.picos[$('pico').value];
-    const blob=new Blob([JSON.stringify({disclosure:'SIMULATION_ONLY; state-conditioned mean life, not measured usage or remaining life',data,scenario:current},null,2)],{type:'application/json'});
+    const blob=new Blob([JSON.stringify({disclosure:'SIMULATION_ONLY; state-conditioned mean life, not measured usage or remaining life',paper_pressure_weibull:base,validation:snapshot.validation||null,data,labeled_reference_checks:snapshot.labeled_reference_checks?.[$('pico').value]||null,scenario:current},null,2)],{type:'application/json'});
     const url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download='SIMULATION_ONLY-demo-comparison.json';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);
   });
   window.addEventListener('resize',render);refresh();setInterval(refresh,3000);
