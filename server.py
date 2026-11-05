@@ -679,8 +679,13 @@ def api_process_orders():
 @app.route("/api/process-orders/bulk-delete", methods=["POST"])
 def api_process_orders_bulk_delete():
     origin = request.headers.get("Origin")
+    allowed_origins = {request.host_url.rstrip("/")}
+    # Render terminates HTTPS before forwarding to the internal HTTP server.
+    external_origin = os.environ.get("RENDER_EXTERNAL_URL", "").strip().rstrip("/")
+    if external_origin:
+        allowed_origins.add(external_origin)
     if (request.headers.get("X-Order-Delete") != "permanent"
-            or (origin and origin != request.host_url.rstrip("/"))):
+            or (origin and origin not in allowed_origins)):
         return jsonify({"error": "same_origin_order_screen_required"}), 403
     payload = read_json_payload()
     ids = payload.get("order_ids")

@@ -4,6 +4,7 @@ import os
 from pathlib import Path
 import sqlite3
 import unittest
+from unittest.mock import patch
 from uuid import UUID
 from flask import Flask, request, jsonify
 
@@ -19,7 +20,7 @@ class BulkDeleteTests(unittest.TestCase):
         route = next(n for n in tree.body if isinstance(n, ast.FunctionDef) and n.name == 'api_process_orders_bulk_delete')
         app = Flask(__name__)
         class Missing(Exception): pass
-        ns = dict(app=app, request=request, jsonify=jsonify, ProcessOrderNotFoundError=Missing,
+        ns = dict(app=app, request=request, jsonify=jsonify, os=os, ProcessOrderNotFoundError=Missing,
                   read_json_payload=lambda: request.get_json(silent=True) or {},
                   valid_order_id=lambda s: str(UUID(str(s))) if isinstance(s, str) and len(s) == 36 else '')
         # Use the implementation's actual UUID validation, including invalid input handling.
@@ -72,6 +73,15 @@ class BulkDeleteTests(unittest.TestCase):
     def test_missing_order_preserves_selection(self):
         with self.assertRaises(Exception): self.storage.delete_orders([self.ids[0], str(UUID(int=99))])
         self.assertEqual(self.count('process_judgments'), 3)
+
+    def test_render_https_origin_is_accepted_only_for_configured_service(self):
+        with patch.dict(os.environ, {'RENDER_EXTERNAL_URL': 'https://ml-cylinder.onrender.com'}):
+            payload = dict(order_ids=[], confirm_order_ids=[])
+            headers = {**self.headers, 'Origin': 'https://ml-cylinder.onrender.com'}
+            self.assertEqual(self.client.post('/api/process-orders/bulk-delete', json=payload, headers=headers).status_code, 400)
+            headers['Origin'] = 'https://elsewhere.test'
+            self.assertEqual(self.client.post('/api/process-orders/bulk-delete', json=payload, headers=headers).status_code, 403)
+        self.assertEqual(self.count('process_orders'), 3)
 
     def test_invalid_confirmation_origin_and_selection_never_delete(self):
         cases = [({}, self.headers, 400),
