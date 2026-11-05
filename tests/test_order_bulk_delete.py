@@ -27,7 +27,9 @@ class BulkDeleteTests(unittest.TestCase):
         validator = next(n for n in tree.body if isinstance(n, ast.FunctionDef) and n.name == 'valid_order_id')
         import uuid
         ns['uuid'] = uuid
-        exec(compile(ast.Module(body=[cls, validator, route], type_ignores=[]), str(path), 'exec'), ns)
+        orders_route = next(n for n in tree.body if isinstance(n, ast.FunctionDef) and n.name == 'api_process_orders')
+        ns['normalize_process_product'] = lambda s: s if s in ('A', 'B') else ''
+        exec(compile(ast.Module(body=[cls, validator, route, orders_route], type_ignores=[]), str(path), 'exec'), ns)
         self.storage = ns['PostgresProcessOrderStorage']()
         self.db = sqlite3.connect(':memory:')
         self.db.executescript('PRAGMA foreign_keys=ON; CREATE TABLE process_orders(order_id TEXT PRIMARY KEY); CREATE TABLE process_judgments(order_id TEXT REFERENCES process_orders(order_id) ON DELETE RESTRICT);')
@@ -82,6 +84,20 @@ class BulkDeleteTests(unittest.TestCase):
             headers['Origin'] = 'https://elsewhere.test'
             self.assertEqual(self.client.post('/api/process-orders/bulk-delete', json=payload, headers=headers).status_code, 403)
         self.assertEqual(self.count('process_orders'), 3)
+
+    def test_render_blocks_creation_before_accessing_database_but_preserves_listing(self):
+        calls = []
+        self.storage.create_order = lambda *args: calls.append(args) or {'order_id': self.ids[0]}
+        self.storage.list_orders = lambda limit: [{'order_id': self.ids[0]}]
+        with patch.dict(os.environ, {'RENDER': 'true'}):
+            r = self.client.post('/api/process-orders', json={'product_name': 'test', 'requested_product': 'A'})
+            self.assertEqual(r.status_code, 403)
+            self.assertEqual(r.json['error'], 'local_order_creation_required')
+            self.assertEqual(self.client.get('/api/process-orders').status_code, 200)
+        self.assertFalse(calls)
+        with patch.dict(os.environ, {'RENDER': 'false'}):
+            self.assertEqual(self.client.post('/api/process-orders', json={'product_name': 'test', 'requested_product': 'A'}).status_code, 201)
+        self.assertEqual(calls, [('test', 'A')])
 
     def test_invalid_confirmation_origin_and_selection_never_delete(self):
         cases = [({}, self.headers, 400),

@@ -649,7 +649,10 @@ def api_real_cylinder():
 
 @app.route("/api/process-orders", methods=["GET", "POST"])
 def api_process_orders():
-    """Create an A/B order or list recent process orders."""
+    """Create orders locally; Render only lists existing orders."""
+    if request.method == "POST" and os.environ.get("RENDER") == "true":
+        return jsonify({"error": "local_order_creation_required",
+                        "message": "주문은 Pi 로컬 주문 사이트에서 등록하세요."}), 403
     try:
         order_storage = process_storage()
         if request.method == "GET":
