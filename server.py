@@ -232,6 +232,36 @@ class PostgresProcessOrderStorage:
             raise ProcessOrderNotFoundError("process order not found")
         return row
 
+    def delete_order(self, order_id: str) -> None:
+            """Permanently remove one order and its judgment in one transaction."""
+            self.delete_orders([order_id])
+
+    def delete_orders(self, order_ids: list[str]) -> None:
+            """Delete exactly the selected orders atomically, locking in UUID order."""
+            if not 1 <= len(order_ids) <= 100 or len(set(order_ids)) != len(order_ids):
+                raise ValueError("invalid order selection")
+            selected_ids = tuple(sorted(order_ids))
+            placeholders = ", ".join(["%s"] * len(selected_ids))
+            with self._connect() as connection:
+                connection.execute("SET LOCAL lock_timeout = '5s'")
+                connection.execute("SET LOCAL statement_timeout = '10s'")
+                rows = connection.execute(
+                    f"SELECT order_id FROM process_orders WHERE order_id IN ({placeholders}) ORDER BY order_id FOR UPDATE",
+                    selected_ids,
+                ).fetchall()
+                if len(rows) != len(selected_ids):
+                    raise ProcessOrderNotFoundError("process order not found")
+                # The existing foreign key uses RESTRICT. Keep the schema intact.
+                connection.execute(
+                    f"DELETE FROM process_judgments WHERE order_id IN ({placeholders})", selected_ids
+                )
+                deleted = connection.execute(
+                    f"DELETE FROM process_orders WHERE order_id IN ({placeholders}) RETURNING order_id",
+                    selected_ids,
+                ).fetchall()
+                if len(deleted) != len(selected_ids):
+                    raise RuntimeError("order deletion was not confirmed")
+
     def create_manual_judgment(
         self, order_id: str, detected_product: str
     ) -> tuple[dict, bool]:
@@ -644,6 +674,31 @@ def api_process_orders():
         return jsonify(order_storage.create_order(product_name, requested_product)), 201
     except RuntimeError as exc:
         return jsonify({"error": "process_order_unavailable", "message": str(exc)}), 503
+
+
+@app.route("/api/process-orders/bulk-delete", methods=["POST"])
+def api_process_orders_bulk_delete():
+    origin = request.headers.get("Origin")
+    if (request.headers.get("X-Order-Delete") != "permanent"
+            or (origin and origin != request.host_url.rstrip("/"))):
+        return jsonify({"error": "same_origin_order_screen_required"}), 403
+    payload = read_json_payload()
+    ids = payload.get("order_ids")
+    if (not isinstance(ids, list) or not 1 <= len(ids) <= 100
+            or any(not isinstance(item, str) or not valid_order_id(item) or valid_order_id(item) != item for item in ids)
+            or len(set(ids)) != len(ids)):
+        return jsonify({"error": "invalid_order_selection"}), 400
+    if payload.get("confirm_order_ids") != ids:
+        return jsonify({"error": "order_delete_confirmation_required"}), 400
+    try:
+        process_storage().delete_orders(ids)
+        return jsonify({"deleted": True, "order_ids": ids, "deleted_count": len(ids)})
+    except ProcessOrderNotFoundError:
+        return jsonify({"error": "process_order_not_found",
+                        "message": "선택한 주문 목록이 변경됐습니다. 새로고침 후 다시 선택하세요."}), 404
+    except Exception:
+        return jsonify({"error": "process_order_delete_failed",
+                        "message": "일괄 삭제를 확인하지 못했습니다. 주문 목록을 새로고침하세요."}), 503
 
 
 @app.route("/api/process-orders/<order_id>")
