@@ -441,6 +441,15 @@ def main():
             adapter['load_environment'](str(args.root/'.env'))
             from system.DB.Supabase.cylinder_result_repository import CylinderResultRepository
             client_factory=lambda _:CylinderResultRepository()._get_client()
+        if args.source == 'sqlite':
+            usage_tool = Path(__file__).with_name('build_db_usage.py')
+            if usage_tool.exists():
+                usage = runpy.run_path(str(usage_tool))['build'](args.database_directory or args.root/'data')
+                atomic_json(args.root/'data/lifetime-db-usage.json', usage)
+                usage_path=args.root/'public/lifetime-db-usage.js'
+                usage_tmp=usage_path.with_suffix('.tmp')
+                usage_tmp.write_text('window.LIFETIME_DB_USAGE = '+json.dumps(usage,ensure_ascii=False,allow_nan=False)+';\n',encoding='utf-8')
+                usage_tmp.replace(usage_path)
         chosen=(args.cylinder,) if args.cylinder else PICOS
         result=analyze_picos(args.database_directory or args.root/'data',chosen,operation_since=args.operation_since,
                              client_factory=client_factory)

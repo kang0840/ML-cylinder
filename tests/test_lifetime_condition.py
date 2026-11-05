@@ -88,7 +88,8 @@ const c={console,Math,Number,Array,Object,Error,Date,URLSearchParams,location:{s
 c.window=c;c.devicePixelRatio=1;c.addEventListener=()=>{};
 vm.createContext(c);for(const f of ['lifetime-condition-math.js','lifetime-condition-snapshot.js','lifetime-condition-ui.js'])vm.runInContext(fs.readFileSync(root+'/public/'+f,'utf8'),c);
 assert(element('error').textContent.includes('누적 사용량 미상'));assert.equal(element('mean').textContent,'입력 확인');
-assert(element('videoUsage').textContent.includes('2.6016'));assert(element('videoUsage').textContent.includes('388.8'));
+assert.equal(element('ageMode').value,'auto');assert.equal(element('age').value,'');assert(element('used').textContent.includes('389'));assert(element('dbUsage').textContent.includes('389'));
+assert(element('videoUsage').textContent.includes('2.6016'));assert(element('videoUsage').textContent.includes('389'));
 element('ageMode').value='manual';element('age').value='100';element('age').listeners.change();assert.equal(element('error').textContent,'');assert(element('used').textContent.includes('실측 입력'));
 element('age').value='100.5';element('age').listeners.change();assert(element('error').textContent.includes('정수'));assert.equal(element('mean').textContent,'입력 확인');
 element('ageMode').value='operation';element('ageMode').listeners.change();assert(element('error').textContent.includes('생성하지 않습니다'));assert.equal(element('mean').textContent,'입력 확인');
@@ -160,6 +161,37 @@ class PerPicoDatabaseTests(unittest.TestCase):
                 spectrum=data['spectra']['inmp441'];peak=max(range(len(spectrum['normal_mean_log1p'])),key=lambda i:spectrum['normal_mean_log1p'][i])
                 self.assertEqual(spectrum['frequency_hz'][peak],expected)
             self.assertEqual(result['picos']['cylinder_02']['reason'],'NORMAL_BASELINE_REQUIRED')
+            # No fallback to labeled experiments when operation is absent.
+            operation=model.analyze_picos(Path(folder),operation_since='all',progress=lambda *a,**k:None)
+            self.assertEqual(operation['picos']['cylinder_01']['reason'],'OPERATION_DATA_REQUIRED')
+            db=sqlite3.connect(Path(folder)/'pico01-analysis.sqlite3')
+            meta=json.loads(db.execute('SELECT document FROM sessions').fetchone()[0])
+            meta.update(session_id=str(UUID(int=101)),collection_mode='OPERATION',ground_truth=None,physical_cylinder_id=None,test_conditions={})
+            db.execute('INSERT INTO sessions VALUES (?,?)',(meta['session_id'],json.dumps(meta)))
+            row=json.loads(db.execute('SELECT document FROM raw_data WHERE id=3').fetchone()[0])
+            row.update(id=10,session_id=meta['session_id'],sequence_id=1)
+            row['raw_payload'].update(session_id=meta['session_id'],sequence_id=1)
+            db.execute('INSERT INTO raw_data VALUES (?,?,?,?)',(10,meta['session_id'],1,json.dumps(row)))
+            row.update(id=11,sequence_id=2)
+            row['raw_payload'].update(sequence_id=2)
+            row['raw_payload'].pop('runtime')
+            db.execute('INSERT INTO raw_data VALUES (?,?,?,?)',(11,meta['session_id'],2,json.dumps(row)))
+            db.commit();db.close()
+            operation=model.analyze_picos(Path(folder),operation_since='all',progress=lambda *a,**k:None)['picos']['cylinder_01']
+            self.assertEqual(operation['status'],'SIMULATION_ONLY')
+            self.assertEqual(operation['operation_packets'],1)
+            self.assertEqual(operation['excluded_packet_count'],1)
+            self.assertEqual(operation['excluded_packets'][0]['raw_id'],11)
+            self.assertEqual(operation['excluded_packets'][0]['reason'],'PI_RECEIPT_METADATA_MISSING')
+            self.assertEqual(operation['leak_packets'],0)
+            self.assertEqual(operation['default_assumptions']['feature'],'OPERATION')
+            self.assertIsNone(operation['spectra']['inmp441']['leak_mean_log1p'])
+            self.assertIsNotNone(operation['spectra']['inmp441']['operation_mean_log1p'])
+            self.assertIsNone(operation['sessions'][-1]['ground_truth'])
+            self.assertIsNone(operation['default_result'])
+            db=sqlite3.connect(Path(folder)/'pico01-analysis.sqlite3')
+            self.assertEqual(db.execute('SELECT count(*) FROM raw_data WHERE id=11').fetchone()[0],1)
+            db.execute('DELETE FROM raw_data WHERE id IN (10,11)');db.execute('DELETE FROM sessions WHERE session_id=?',(meta['session_id'],));db.commit();db.close()
             client=model.PicoSQLiteClient(Path(folder),'cylinder_01')
             with self.assertRaises(sqlite3.OperationalError):client.db.execute('DELETE FROM raw_data')
             writer=sqlite3.connect(Path(folder)/'pico01-analysis.sqlite3')
@@ -180,10 +212,10 @@ vm.runInContext(fs.readFileSync(root+'/public/lifetime-condition-math.js','utf8'
 const five=c.LIFETIME_CONDITION_SNAPSHOT.picos?.cylinder_05||c.LIFETIME_CONDITION_SNAPSHOT,one=JSON.parse(JSON.stringify(five));one.cylinder_id='cylinder_01';delete one.video_usage;one.default_assumptions.feature='NORMAL';
 c.LIFETIME_CONDITION_SNAPSHOT={status:'PICO_ANALYSIS_COLLECTION',default_cylinder:'cylinder_05',picos:{cylinder_01:one,cylinder_05:five,cylinder_02:{status:'DATA_REQUIRED',cylinder_id:'cylinder_02',message:'정상 기준 필요',source_inventory:{raw_packets:0},generated_at:five.generated_at}}};
 el('sensor').value='inmp441';el('parameterMode').value='fit';el('influence').value='.25';vm.runInContext(fs.readFileSync(root+'/public/lifetime-condition-ui.js','utf8'),c);
-el('priorMeasuredCycles').value='100';el('priorMeasuredCycles').listeners.change();assert.equal(el('error').textContent,'');
-el('pico').value='cylinder_01';el('pico').listeners.change();assert(el('source').textContent.includes('cylinder_01'));assert.equal(el('priorMeasuredCycles').value,'');assert.equal(el('ageMode').value,'manual');assert.equal(el('mean').textContent,'입력 확인');
+el('ageMode').value='video';el('priorMeasuredCycles').value='100';el('priorMeasuredCycles').listeners.change();assert.equal(el('error').textContent,'');
+el('pico').value='cylinder_01';el('pico').listeners.change();assert(el('source').textContent.includes('cylinder_01'));assert.equal(el('priorMeasuredCycles').value,'');assert.equal(el('ageMode').value,'auto');assert.equal(el('mean').textContent,'입력 확인');
 el('pico').value='cylinder_02';el('pico').listeners.change();assert(el('analysisContent').hidden);assert(el('picoState').textContent.includes('정상 기준'));assert.equal(el('mean').textContent,'입력 확인');
-el('pico').value='cylinder_05';el('pico').listeners.change();assert(!el('analysisContent').hidden);assert.equal(el('priorMeasuredCycles').value,'');assert(el('videoUsage').textContent.includes('388.8'));console.log('PICO_SWITCH_PASS');
+el('pico').value='cylinder_05';el('pico').listeners.change();assert(!el('analysisContent').hidden);assert.equal(el('priorMeasuredCycles').value,'');assert(el('videoUsage').textContent.includes('389'));console.log('PICO_SWITCH_PASS');
 '''
         completed=subprocess.run(['node','-e',code,str(ROOT)],capture_output=True,text=True)
         self.assertEqual(completed.returncode,0,completed.stdout+completed.stderr)
