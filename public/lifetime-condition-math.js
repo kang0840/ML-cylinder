@@ -52,5 +52,17 @@
       mean_total_cycles:age+mean,survival:Array.from({length:101},(_,i)=>({extra_cycles:upper*i/100,probability:survival(upper*i/100)})),
       formula:'S(age+extra|D)/S(age|D); scale(D)=scale0*exp(-assumed_influence*D)'};
   }
-  const api={fit,evaluate};root.LifetimeConditionMath=api;if(typeof module!=='undefined')module.exports=api;
+  function condition({referenceMean,shape,distance,influence}){
+    if([referenceMean,shape,distance,influence].some(x=>typeof x!=='number'||!Number.isFinite(x)))throw Error('수명 기준과 소리 영향값을 숫자로 입력하세요.');
+    if(!(referenceMean>=1&&referenceMean<=1e8&&shape>=.2&&shape<=50&&distance>=0&&distance<=100&&influence>=0&&influence<=5))throw Error('수명 기준 또는 소리 영향값이 지원 범위 밖입니다.');
+    const baselineScale=referenceMean/Math.exp(logGamma(1+1/shape)),scale=baselineScale*Math.exp(-influence*distance);
+    if(scale<1e-6)throw Error('소리 영향이 너무 큽니다. 영향 계수를 줄이세요.');
+    const mean=scale*Math.exp(logGamma(1+1/shape)),upper=scale*Math.pow(-Math.log(1e-6),1/shape);
+    return {status:'SIMULATION_ONLY',reference_mean_cycles:referenceMean,shape,assumed_sound_influence:influence,
+      condition_distance:distance,effective_scale:scale,mean_life_cycles:mean,median_life_cycles:scale*Math.pow(Math.log(2),1/shape),
+      change_from_reference_percent:100*(mean/referenceMean-1),actual_age_cycles:null,remaining_cycles:null,
+      survival:Array.from({length:81},(_,i)=>({cycles:upper*i/80,probability:Math.exp(-Math.pow((upper*i/80)/scale,shape))})),
+      formula:'mean(D)=reference_mean*exp(-assumed_gamma*D); unconditional total-life scenario, not remaining life'};
+  }
+  const api={fit,evaluate,condition};root.LifetimeConditionMath=api;if(typeof module!=='undefined')module.exports=api;
 })(typeof window!=='undefined'?window:globalThis);
