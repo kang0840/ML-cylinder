@@ -25,7 +25,7 @@
     for(const s of series){c.strokeStyle=s.color;c.lineWidth=2;c.beginPath();s.points.forEach((p,i)=>{const x=left+p[0]/mx*(right-left),y=bottom-p[1]/my*(bottom-top);i?c.lineTo(x,y):c.moveTo(x,y);});c.stroke();}
     c.fillStyle='#a9bcc6';c.fillText(axis,left,h-5);
   }
-  function resetResults(){current=null;for(const id of ['demoMean','demoMedian','demoDistance','demoNearest'])$(id).textContent='비교 대기';clearPlot('demoSpectrum');clearPlot('demoSurvival');}
+  function resetResults(){current=null;$('demoSpectrum').hidden=true;$('demoSurvival').hidden=true;for(const id of ['demoMean','demoMedian','demoDistance','demoNearest'])$(id).textContent='비교 대기';clearPlot('demoSpectrum');clearPlot('demoSurvival');}
   function render(){
     resetResults();
     if(!snapshot||!math){$('demoStatus').textContent='시현 비교 자료가 없습니다. Pi에서 08. 모의 수명 분석을 실행하세요.';return;}
@@ -39,6 +39,12 @@
     const reference=data.reference||{};
     $('demoCounts').textContent='정상 기준 '+count(reference.normal_packets||0)+'패킷 / 누설 비교 '+count(reference.leak_packets||0)+'패킷 · 시현 조회 '+count(data.sampled_packets||0)+'패킷 / 음향 후보 '+count(data.active_candidates||0)+'개 / 낮은 활동성 제외 '+count(data.low_activity_packets||0)+'개 · Pico DB 보유 '+(data.source_raw_packets==null?'미확인':count(data.source_raw_packets)+'패킷');
     $('demoConditions').textContent=data.identity_conditions_confirmed?'시현 데이터의 실물·조건이 기준과 일치합니다.':'시현 데이터의 실물·조건 일치는 미확인입니다. 같은 Pico 채널의 탐색적 비교입니다.';
+    const baseline=reference.sensors&&reference.sensors[$('demoSensor').value];
+    if(baseline){
+      const series=[{color:'#43d8b0',points:baseline.frequency_hz.map((f,i)=>[f,baseline.normal_mean[i]])}];
+      if(baseline.leak_mean)series.push({color:'#ffb86b',points:baseline.frequency_hz.map((f,i)=>[f,baseline.leak_mean[i]])});
+      $('demoSpectrum').hidden=false;plot('demoSpectrum',series,'기존 측정 기준 · 주파수 Hz · 세로 log(1 + STFT 진폭)');
+    }
     if(data.status!=='DEMO_COMPARISON_READY'||(old&&!replay))return;
     try{
       const referenceMean=Number($('demoPaperMean').value),influence=Number($('demoInfluence').value);
@@ -50,8 +56,8 @@
       $('demoNearest').textContent+=' · 상태 정답 아님';
       const spectrum=data.spectra[$('demoSensor').value],series=[{color:'#43d8b0',points:spectrum.frequency_hz.map((f,i)=>[f,spectrum.normal_mean[i]])}];
       if(spectrum.leak_mean)series.push({color:'#ffb86b',points:spectrum.frequency_hz.map((f,i)=>[f,spectrum.leak_mean[i]])});
-      series.push({color:'#64ceff',points:spectrum.frequency_hz.map((f,i)=>[f,spectrum.demo_mean[i]])});plot('demoSpectrum',series,'주파수 Hz · 세로 log(1 + STFT 진폭)');
-      plot('demoSurvival',[{color:'#64ceff',points:current.survival.map(p=>[p.cycles,p.probability*100])}],'총 수명 왕복 횟수 · 세로 생존확률 %');
+      series.push({color:'#64ceff',points:spectrum.frequency_hz.map((f,i)=>[f,spectrum.demo_mean[i]])});$('demoSpectrum').hidden=false;plot('demoSpectrum',series,'주파수 Hz · 세로 log(1 + STFT 진폭)');
+      $('demoSurvival').hidden=false;plot('demoSurvival',[{color:'#64ceff',points:current.survival.map(p=>[p.cycles,p.probability*100])}],'총 수명 왕복 횟수 · 세로 생존확률 %');
     }catch(error){resetResults();$('demoStatus').textContent=error.message;}
   }
   async function refresh(){
