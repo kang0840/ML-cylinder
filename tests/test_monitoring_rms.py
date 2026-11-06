@@ -6,6 +6,8 @@ import struct
 import sys
 import types
 import unittest
+from unittest.mock import patch
+import zipfile
 
 ROOT=Path(__file__).resolve().parents[1]
 sys.path.insert(0,str(ROOT.parent))
@@ -96,6 +98,17 @@ class DisplayRMSTests(unittest.TestCase):
         result=module.fill_display_rms(response([raw()]),'cylinder_05',Failed(),'db1')
         self.assertIsNone(result['latest']['packet_metrics']);self.assertEqual(result['packet_metrics_status'],'UNAVAILABLE')
         self.assertNotIn('private',str(result))
+
+    def test_actual_render_0_1_11_parser_compatibility_and_input_immutability(self):
+        with zipfile.ZipFile(ROOT/'deploy/smart_cylinder_common-0.1.11-py3-none-any.whl') as wheel:
+            source=wheel.read('system/MQTT/message_parser.py').decode('utf-8')
+        namespace={};exec(compile(source,'deployed_0_1_11_parser.py','exec'),namespace)
+        r=raw();before=deepcopy(r);repo=Repository([r])
+        with patch('system.MQTT.message_parser.parse_payload',namespace['parse_payload']):
+            result=module.fill_display_rms(response([r]),'cylinder_05',repo,'old-db')
+        self.assertEqual(result['latest']['packet_metrics']['sph0645']['rms'],1)
+        self.assertEqual(result['packet_metrics_status'],'READY')
+        self.assertEqual(r,before)
 
 
 if __name__=='__main__':unittest.main()

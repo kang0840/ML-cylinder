@@ -5,6 +5,7 @@ OPERATION selection must complete before calling this helper.
 """
 from collections import OrderedDict, defaultdict
 from copy import deepcopy
+from datetime import datetime, timedelta, timezone
 import hashlib
 import os
 import threading
@@ -60,7 +61,14 @@ def fill_display_rms(result,cylinder,repository,source_key=None):
                             try:
                                 pcm=raw['raw_payload'];received=(pcm.get('runtime') or {}).get('last_received_at')
                                 if not received:continue
-                                payload=parse_payload(pcm,received_at=received)
+                                # 0.1.11's parser predates received_at= and mutates
+                                # its input. Normalize a copy for both versions.
+                                prepared=deepcopy(pcm)
+                                if prepared.get('timestamp')=='PI_RECEIVE_TIME':
+                                    moment=datetime.fromisoformat(received.replace('Z','+00:00'))
+                                    if moment.tzinfo is None:continue
+                                    prepared['timestamp']=moment.astimezone(timezone(timedelta(hours=9))).isoformat()
+                                payload=parse_payload(prepared)
                                 if _identity(payload)!=key:continue
                                 value=make_packet_metrics(payload)
                             except (KeyError,ValueError,TypeError,OverflowError):continue
