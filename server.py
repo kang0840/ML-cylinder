@@ -628,6 +628,8 @@ def api_real_cylinder():
                 result = service.monitoring(cylinder, limit)
                 from src.monitoring_rms import fill_display_rms
                 result = fill_display_rms(result, cylinder, service._repository)
+                from src.monitoring_noise import attach_noise_rms
+                result = attach_noise_rms(result, cylinder, service._repository)
                 result["serial"] = serial
                 return jsonify(result)
             except ValueError:

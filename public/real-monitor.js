@@ -262,6 +262,7 @@ function renderCanonical(data)
         ? latest.packet_metrics[sensor].rms.toFixed(2) : '수신 대기';
     text('sensorRms', `${rmsText('sph0645')} / ${rmsText('inmp441')}`, '센서 수신 대기');
     const packetRows = (data.history || []).filter(row => row.session_id === latest?.session_id);
+    if (window.renderNoiseComparison) window.renderNoiseComparison(data, draw);
     function packetSeries(sensor)
     {
         const values = [];

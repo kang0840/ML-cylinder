@@ -31,9 +31,10 @@
 </section>
 
 <section class="charts"><article class="card"><h2 id="resultRmsTitle">실시간 패킷 RMS 변화</h2><div id="resultRmsDescription" class="muted">센서별 평균 제거 후 상대 PCM 진폭 · 파랑 SPH0645 / 노랑 INMP441 · 가로축은 최근 패킷 순서입니다. 수신 간격은 균일한 연속 음향 시간이 아니며 누락 구간은 연결하지 않습니다. Cycle·학습 특징이나 수명 판정이 아닙니다.</div><strong id="resultRmsValues" class="value">센서 데이터 대기</strong><div id="resultRmsTime" class="muted">측정 시각 없음</div><canvas id="packetChart"></canvas></article></section>
+<section class="charts"><article class="card" id="noiseComparison"><h2>소음 보정 전·후 RMS</h2><div id="noiseRmsState" class="muted">Pi 보정 결과 대기</div><strong id="noiseRmsValues" class="value">보정 전·후 비교 데이터 대기</strong><div id="noiseRmsTime" class="muted">보정 측정 시각 없음</div><p class="muted">동일 패킷 비교 · 회색은 DC 제거 원본, 파랑·노랑은 Pi에서 소음 보정한 값입니다. 상대 PCM 진폭이며 진단 성능이나 소음 제거율을 뜻하지 않습니다. 보정 결과가 없는 구간은 연결하지 않습니다.</p><h3>SPH0645 · 원본 / 소음 보정</h3><canvas id="sph0645NoiseChart" aria-label="SPH0645 원본과 소음 보정 RMS 비교"></canvas><h3>INMP441 · 원본 / 소음 보정</h3><canvas id="inmp441NoiseChart" aria-label="INMP441 원본과 소음 보정 RMS 비교"></canvas></article></section>
 <section class="charts"><article class="card"><h2>실측 STFT · 소리 구간 분석</h2><div id="soundAnalysis" class="muted">기준 패턴 또는 소리 구간 검출 대기</div><p class="muted">검출한 소리 구간 수는 기계 왕복횟수가 아니며 누설 점수는 실제 누설률(%)이 아닙니다.</p><div id="previewState" class="muted">STFT PREVIEW REQUIRED</div><h3>SPH0645 — 시간별 주파수 성분</h3><canvas id="sph0645Preview" style="height:360px" aria-label="SPH0645 측정 구간 시간(초), 선형 주파수(Hz), 상대 진폭(dB)"></canvas><h3>INMP441 — 시간별 주파수 성분</h3><canvas id="inmp441Preview" style="height:360px" aria-label="INMP441 측정 구간 시간(초), 선형 주파수(Hz), 상대 진폭(dB)"></canvas><div class="muted">아래쪽 = 낮은 주파수 · 밝은 노랑 = 강한 성분 · 센서별 Preview 최대값 기준 상대 dB(표시 범위 −60~0 dB). 에너지 비율·절대 음압·고장 판정이 아니며 학습·검출에는 사용하지 않습니다. 축약 Preview의 표시입니다.</div></article></section>
 
-<div id="note" class="note">데이터를 불러오는 중입니다.</div></main><script src="real-monitor.js"></script><script id="lifetimeNavigation">
+<div id="note" class="note">데이터를 불러오는 중입니다.</div></main><script src="noise-monitor.js?v=20261106-noise-1"></script><script src="real-monitor.js?v=20261106-noise-1"></script><script id="lifetimeNavigation">
 const lifetimeSerial = new URLSearchParams(window.location.search).get('serial');
 if (lifetimeSerial)
 {
